@@ -24,10 +24,10 @@ jobs:
         run: cargo clippy --workspace --all-targets --all-features -- -D warnings
       - name: Test
         run: cargo test --workspace --locked
-      - name: Fixture emits deterministic UiManifest
+      - name: Compiler fixture emits deterministic UiManifest
         run: |
-          cargo run --quiet -p uiko-cli -- build fixtures/support-console \
-            --ui-manifest /tmp/app.uiko-manifest.json
+          cargo run --quiet -p uiko-cli -- build experiments/fixtures/compiler-support-console \
+            --ui-manifest /tmp/compiler-fixture.uiko-manifest.json
           jq -e '
             .specVersion == 1
             and .app == "support-console"
@@ -39,7 +39,16 @@ jobs:
             and ([.routes[].queries[] | has("externalOperationId")] | any | not)
             and ([.routes[].queries[] | has("method")] | any | not)
             and ([.routes[].queries[] | has("path")] | any | not)
-          ' /tmp/app.uiko-manifest.json > /dev/null
+          ' /tmp/compiler-fixture.uiko-manifest.json > /dev/null
+      - name: Measured C_UIKO base starts with zero routes
+        run: |
+          cargo run --quiet -p uiko-cli -- build fixtures/support-console \
+            --ui-manifest /tmp/g0-c-uiko-base.uiko-manifest.json
+          jq -e '
+            .specVersion == 1
+            and .app == "support-console"
+            and (.routes | length) == 0
+          ' /tmp/g0-c-uiko-base.uiko-manifest.json > /dev/null
 
   vue-host:
     runs-on: ubuntu-latest
@@ -55,6 +64,31 @@ jobs:
         run: npm install --ignore-scripts --no-audit --no-fund
       - name: Typecheck
         run: npm run typecheck
+      - name: Build
+        run: npm run build
+
+  b-full:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: baselines/b-full
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.21.0
+      - name: Use frozen npm
+        run: |
+          npm install --global npm@11.19.0
+          test "$(npm --version)" = "11.19.0"
+      - name: Install exact direct dependencies
+        run: npm install --ignore-scripts --no-audit --no-fund
+      - name: Generate frozen OpenAPI types
+        run: npm run generate:api
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Lint
+        run: npm run lint
       - name: Build
         run: npm run build
 
@@ -97,6 +131,13 @@ jobs:
           jq -e '
             ([.dependencies[], .devDependencies[]] | all(test("^[0-9]+\\.[0-9]+\\.[0-9]+$")))
           ' baselines/b-full/package.json > /dev/null
+      - name: Primary G0 bases contain no pre-solved customer tasks
+        run: |
+          ! grep -R -n -E 'listCustomers|getCustomer|listCustomerOrders|/customers' \
+            baselines/b-full/src \
+            fixtures/support-console/uiko.jsonc
+          test ! -d fixtures/support-console/features || \
+            ! find fixtures/support-console/features -type f | grep -q .
       - name: Vue host uses exact direct versions
         run: |
           jq -e '
