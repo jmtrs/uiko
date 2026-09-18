@@ -281,7 +281,7 @@ mod tests {
 
     #[test]
     fn support_console_fixture_loads_contract_capabilities() {
-        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/support-console");
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../experiments/fixtures/compiler-support-console");
         let project = load_project(&root).expect("fixture should load");
         assert_eq!(project.source.value.name, "support-console");
         assert_eq!(project.source.value.modules.len(), 1);
