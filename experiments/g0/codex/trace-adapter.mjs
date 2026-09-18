@@ -99,6 +99,10 @@ export async function runCodexTurn({
     env: process.env,
     stdio: ["ignore", "pipe", "pipe"],
   });
+  const completion = new Promise((resolve, reject) => {
+    child.once("error", reject);
+    child.once("close", (code) => resolve(code ?? 1));
+  });
 
   let timedOut = false;
   const timeout = setTimeout(() => {
@@ -140,10 +144,7 @@ export async function runCodexTurn({
     await translateTelemetry(event, traceWriter);
   }
 
-  const exitCode = await new Promise((resolve, reject) => {
-    child.once("error", reject);
-    child.once("close", (code) => resolve(code ?? 1));
-  });
+  const exitCode = await completion;
   clearTimeout(timeout);
 
   await observer.boundary();
