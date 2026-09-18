@@ -170,6 +170,56 @@ jobs:
           second="$(bash ../../g0/materialize-prerequisite-base.sh R_RENDER_ONLY G0-D05 ../../..)"
           test "$first" = "$second"
 
+  t-authoring:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: experiments/g0/harness
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.21.0
+      - name: Use frozen npm
+        run: |
+          npm install --global npm@11.19.0
+          test "$(npm --version)" = "11.19.0"
+      - name: Install exact harness dependencies
+        run: npm install --ignore-scripts --no-audit --no-fund
+      - name: Typecheck task-neutral TypeScript authoring base
+        run: |
+          node prepare-t-authoring.mjs --root ../../..
+          npm exec -- tsc -p t-authoring-tsconfig.json
+      - name: Lower task-neutral base through real UIKO compiler
+        run: |
+          node lower-t-authoring.mjs --root ../../..
+          cd ../../..
+          cargo run --quiet -p uiko-cli -- build             experiments/controls/t-authoring/generated/project             --ui-manifest /tmp/t-authoring-base.uiko-manifest.json
+          jq -e '(.routes | length) == 0' /tmp/t-authoring-base.uiko-manifest.json > /dev/null
+      - name: D05 prerequisite is deterministic and executable
+        run: |
+          cd ../../..
+          base="$(git rev-parse HEAD)"
+          rm -rf experiments/controls/t-authoring/generated
+          rm -f experiments/g0/harness/package-lock.json
+          first="$(bash experiments/g0/materialize-prerequisite-base.sh T_AUTHORING G0-D05 .)"
+          cd experiments/g0/harness
+          node prepare-t-authoring.mjs --root ../../..
+          npm exec -- tsc -p t-authoring-tsconfig.json
+          node lower-t-authoring.mjs --root ../../..
+          cd ../../..
+          cargo run --quiet -p uiko-cli -- build             experiments/controls/t-authoring/generated/project             --ui-manifest /tmp/t-authoring-d03.uiko-manifest.json
+          jq -e '
+            (.routes | length) == 1
+            and ((.routes[0].state) | any(.id == "status" and .initial == null))
+            and ((.routes[0].components) | any(.kind == "Select" and .state == "status"))
+          ' /tmp/t-authoring-d03.uiko-manifest.json > /dev/null
+          git reset --hard --quiet "$base"
+          rm -rf experiments/controls/t-authoring/generated
+          rm -f experiments/g0/harness/package-lock.json
+          second="$(bash experiments/g0/materialize-prerequisite-base.sh T_AUTHORING G0-D05 .)"
+          test "$first" = "$second"
+
   g0-harness:
     runs-on: ubuntu-latest
     defaults:
@@ -218,18 +268,27 @@ jobs:
             experiments/g0/path-policy.json \
             experiments/g0/prerequisite-bases.json \
             experiments/g0/harness/package.json \
+            experiments/g0/harness/t-authoring-lock.json \
             experiments/g0/run-result.schema.json \
             experiments/g0/trace-event.schema.json \
             experiments/g0/run-template.json \
             hosts/vue/package.json \
             hosts/vue/tsconfig.json
-      - name: G0 acceptance harness uses frozen Playwright
+      - name: G0 acceptance harness and TypeScript authoring toolchain are frozen
         run: |
           jq -e '
             .engines.node == "24.21.0"
             and .packageManager == "npm@11.19.0"
             and .devDependencies["@playwright/test"] == "1.63.0"
+            and .devDependencies.typescript == "5.9.3"
           ' experiments/g0/harness/package.json > /dev/null
+          jq -e '
+            .status == "frozen-g0-v1"
+            and .arm == "T_AUTHORING"
+            and .runtime.node == "24.21.0"
+            and .runtime.npm == "11.19.0"
+            and .runtime.typescript == "5.9.3"
+          ' experiments/g0/harness/t-authoring-lock.json > /dev/null
       - name: G0 prerequisite graph is explicit and materializer is valid shell
         run: |
           bash -n experiments/g0/materialize-prerequisite-base.sh
@@ -245,6 +304,7 @@ jobs:
             and (.templates.B_FULL | keys == ["D01","D02","D03"])
             and (.templates.C_UIKO | keys == ["D01","D02","D03"])
             and .templates.R_RENDER_ONLY.D03 == "experiments/g0/prerequisites/R_RENDER_ONLY/D03"
+            and .templates.T_AUTHORING.D03 == "experiments/g0/prerequisites/T_AUTHORING/D03"
           ' experiments/g0/prerequisite-bases.json > /dev/null
       - name: G0 task set and probes are frozen
         run: |
@@ -278,6 +338,7 @@ jobs:
           ! grep -R -n -E 'listCustomers|getCustomer|listCustomerOrders|/customers' \
             baselines/b-full/src \
             experiments/controls/r-render-only/src \
+            experiments/controls/t-authoring/app.ts \
             fixtures/support-console/uiko.jsonc
           test ! -d fixtures/support-console/features || \
             ! find fixtures/support-console/features -type f | grep -q .
