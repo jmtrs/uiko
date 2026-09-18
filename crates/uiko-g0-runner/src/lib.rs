@@ -1201,9 +1201,9 @@ mod tests {
     };
 
     use super::{
-        aggregate_run, inserted_token_count, myers_distance, Arm, EditOperation,
-        EnvironmentMetadata, EventPayload, ModelMetadata, Outcome, PathClass, PathClassifier,
-        PathPolicy, TraceEvent,
+        Arm, EditOperation, EnvironmentMetadata, EventPayload, ModelMetadata, Outcome, PathClass,
+        PathClassifier, PathPolicy, TraceEvent, aggregate_run, inserted_token_count,
+        myers_distance,
     };
 
     const APP_PATH: &str = "fixtures/support-console/features/customers/metric.jsonc";
