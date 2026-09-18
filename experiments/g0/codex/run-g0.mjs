@@ -31,10 +31,7 @@ async function main() {
       results: { type: "string" },
       worktree: { type: "string" },
       codex: { type: "string", default: "codex" },
-      lock: {
-        type: "string",
-        default: resolve(defaultRepoRoot, "experiments/g0/experiment-lock.json"),
-      },
+      lock: { type: "string" },
     },
   });
 
@@ -42,12 +39,15 @@ async function main() {
   const taskId = required(values.task, "--task");
   const replicate = positiveInteger(values.replicate, "--replicate");
   const sourceRepo = resolve(values.repo);
-  const experimentLock = await readJson(resolve(values.lock));
-  const lockRevision = assertLockCheckout(sourceRepo, experimentLock);
+  const lockPath = resolve(
+    values.lock ?? resolve(sourceRepo, "experiments/g0/experiment-lock.json"),
+  );
+  const experimentLock = await readJson(lockPath);
   const adapterLock = await readJson(
     resolve(sourceRepo, "experiments/g0/codex/adapter-lock.json"),
   );
   validateExperimentLock(experimentLock, adapterLock, arm, taskId);
+  const lockRevision = assertLockCheckout(sourceRepo, experimentLock);
 
   const runId = `${taskId}-${arm}-r${replicate}`;
   const resultsDir = resolve(
