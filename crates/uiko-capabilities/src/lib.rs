@@ -57,31 +57,49 @@ pub struct ObjectField {
 
 impl ValueShape {
     #[must_use]
-    pub fn supports_path<'a>(&self, path: impl IntoIterator<Item = &'a str>) -> bool {
+    pub fn at_path<'a, 'b>(
+        &'a self,
+        path: impl IntoIterator<Item = &'b str>,
+    ) -> Option<&'a ValueShape> {
         let mut current = self;
         for segment in path {
             match &current.kind {
                 ValueKind::Object(fields) => {
-                    let Some(field) = fields.get(segment) else {
-                        return false;
-                    };
-                    current = &field.value;
+                    current = &fields.get(segment)?.value;
                 }
                 ValueKind::Array(item) => {
-                    current = item;
-                    let ValueKind::Object(fields) = &current.kind else {
-                        return false;
+                    let ValueKind::Object(fields) = &item.kind else {
+                        return None;
                     };
-                    let Some(field) = fields.get(segment) else {
-                        return false;
-                    };
-                    current = &field.value;
+                    current = &fields.get(segment)?.value;
                 }
                 ValueKind::String | ValueKind::Integer | ValueKind::Number | ValueKind::Boolean => {
-                    return false;
+                    return None;
                 }
             }
         }
-        true
+        Some(current)
+    }
+
+    #[must_use]
+    pub fn supports_path<'a>(&self, path: impl IntoIterator<Item = &'a str>) -> bool {
+        self.at_path(path).is_some()
+    }
+
+    #[must_use]
+    pub fn array_item(&self) -> Option<&ValueShape> {
+        match &self.kind {
+            ValueKind::Array(item) => Some(item),
+            ValueKind::String
+            | ValueKind::Integer
+            | ValueKind::Number
+            | ValueKind::Boolean
+            | ValueKind::Object(_) => None,
+        }
+    }
+
+    #[must_use]
+    pub const fn is_numeric(&self) -> bool {
+        matches!(self.kind, ValueKind::Integer | ValueKind::Number)
     }
 }
