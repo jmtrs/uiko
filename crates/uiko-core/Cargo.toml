@@ -5,5 +5,8 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 
+[dependencies]
+uiko-capabilities = { path = "../uiko-capabilities" }
+
 [lints]
 workspace = true
