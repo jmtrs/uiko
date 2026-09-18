@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "status": "pre-measurement-g0-v1",
+  "rule": "Each measured task starts from the frozen prerequisite stage implied by its prompt. EMPTY means the task-neutral arm base at the experiment-lock revision.",
+  "taskBases": {
+    "B_FULL": {
+      "G0-D01": "EMPTY",
+      "G0-D02": "EMPTY",
+      "G0-D03": "D01",
+      "G0-D04": "D02",
+      "G0-D05": "D03",
+      "G0-D06": "D02"
+    },
+    "C_UIKO": {
+      "G0-D01": "EMPTY",
+      "G0-D02": "EMPTY",
+      "G0-D03": "D01",
+      "G0-D04": "D02",
+      "G0-D05": "D03",
+      "G0-D06": "D02"
+    },
+    "R_RENDER_ONLY": {
+      "G0-D01": "EMPTY",
+      "G0-D02": "EMPTY",
+      "G0-D05": "D03"
+    },
+    "T_AUTHORING": {
+      "G0-D01": "EMPTY",
+      "G0-D02": "EMPTY",
+      "G0-D05": "D03"
+    }
+  },
+  "templates": {
+    "B_FULL": {
+      "D01": "experiments/g0/prerequisites/B_FULL/D01",
+      "D02": "experiments/g0/prerequisites/B_FULL/D02",
+      "D03": "experiments/g0/prerequisites/B_FULL/D03"
+    },
+    "C_UIKO": {
+      "D01": "experiments/g0/prerequisites/C_UIKO/D01",
+      "D02": "experiments/g0/prerequisites/C_UIKO/D02",
+      "D03": "experiments/g0/prerequisites/C_UIKO/D03"
+    }
+  },
+  "syntheticCommit": {
+    "authorName": "uiko G0 harness",
+    "authorEmail": "g0@uiko.invalid",
+    "timestamp": "2000-01-01T00:00:00Z",
+    "messageFormat": "g0 prerequisite <ARM> <STAGE> for <TASK_ID>"
+  }
+}

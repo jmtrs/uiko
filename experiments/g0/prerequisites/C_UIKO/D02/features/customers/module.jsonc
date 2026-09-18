@@ -1,0 +1,4 @@
+{
+  "id": "customers",
+  "pages": ["./detail.jsonc"]
+}

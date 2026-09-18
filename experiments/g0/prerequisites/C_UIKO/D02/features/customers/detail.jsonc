@@ -1,0 +1,18 @@
+{
+  "id": "CustomerDetail",
+  "route": "/customers/:customerId",
+  "queries": {
+    "customer": {
+      "operation": "crm.getCustomer",
+      "input": {
+        "customerId": "route.customerId"
+      }
+    }
+  },
+  "components": [
+    { "id": "title", "type": "Text", "value": "Customer" },
+    { "id": "name", "type": "Field", "label": "Name", "binding": "customer.name" },
+    { "id": "email", "type": "Field", "label": "Email", "binding": "customer.email" },
+    { "id": "status", "type": "Field", "label": "Status", "binding": "customer.status" }
+  ]
+}
