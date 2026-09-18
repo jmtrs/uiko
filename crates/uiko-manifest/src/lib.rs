@@ -2,7 +2,7 @@
 
 use std::fmt::Write as _;
 
-use uiko_core::{AppIr, ComponentKindIr};
+use uiko_core::{AppIr, ComponentKindIr, StateValueIr};
 
 pub const UI_MANIFEST_SPEC_VERSION: u32 = 1;
 
@@ -17,8 +17,22 @@ pub struct UiManifest {
 pub struct UiRouteManifest {
     pub id: String,
     pub path: String,
+    pub state: Vec<UiStateManifest>,
     pub queries: Vec<UiQueryManifest>,
     pub components: Vec<UiComponentManifest>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct UiStateManifest {
+    pub id: String,
+    pub initial: UiStateValue,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum UiStateValue {
+    String(String),
+    Integer(i64),
+    Null,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -41,10 +55,36 @@ pub struct UiComponentManifest {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct UiSelectOption {
+    pub label: String,
+    pub value: UiStateValue,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum UiComponentKind {
-    Text { value: String },
-    Field { label: String, binding: String },
-    Table { binding: String },
+    Text {
+        value: String,
+    },
+    Field {
+        label: String,
+        binding: String,
+        fallback: Option<String>,
+    },
+    Table {
+        binding: String,
+    },
+    Select {
+        label: String,
+        state: String,
+        options: Vec<UiSelectOption>,
+    },
+    Pagination {
+        state: String,
+        page_binding: String,
+        page_size_binding: String,
+        total_binding: String,
+    },
 }
 
 #[must_use]
@@ -61,6 +101,14 @@ pub fn derive_ui_manifest(ir: &AppIr) -> UiManifest {
                     UiRouteManifest {
                         id: route_id.clone(),
                         path: page.route.clone(),
+                        state: page
+                            .state
+                            .iter()
+                            .map(|state| UiStateManifest {
+                                id: state.id.clone(),
+                                initial: lower_state_value(&state.initial),
+                            })
+                            .collect(),
                         queries: page
                             .queries
                             .iter()
@@ -86,14 +134,43 @@ pub fn derive_ui_manifest(ir: &AppIr) -> UiManifest {
                                     ComponentKindIr::Text { value } => UiComponentKind::Text {
                                         value: value.clone(),
                                     },
-                                    ComponentKindIr::Field { label, binding } => {
-                                        UiComponentKind::Field {
-                                            label: label.clone(),
-                                            binding: binding.clone(),
-                                        }
-                                    }
+                                    ComponentKindIr::Field {
+                                        label,
+                                        binding,
+                                        fallback,
+                                    } => UiComponentKind::Field {
+                                        label: label.clone(),
+                                        binding: binding.clone(),
+                                        fallback: fallback.clone(),
+                                    },
                                     ComponentKindIr::Table { binding } => UiComponentKind::Table {
                                         binding: binding.clone(),
+                                    },
+                                    ComponentKindIr::Select {
+                                        label,
+                                        state,
+                                        options,
+                                    } => UiComponentKind::Select {
+                                        label: label.clone(),
+                                        state: state.clone(),
+                                        options: options
+                                            .iter()
+                                            .map(|option| UiSelectOption {
+                                                label: option.label.clone(),
+                                                value: lower_state_value(&option.value),
+                                            })
+                                            .collect(),
+                                    },
+                                    ComponentKindIr::Pagination {
+                                        state,
+                                        page_binding,
+                                        page_size_binding,
+                                        total_binding,
+                                    } => UiComponentKind::Pagination {
+                                        state: state.clone(),
+                                        page_binding: page_binding.clone(),
+                                        page_size_binding: page_size_binding.clone(),
+                                        total_binding: total_binding.clone(),
                                     },
                                 },
                             })
@@ -122,6 +199,15 @@ impl UiManifest {
                 .expect("writing to String cannot fail");
             writeln!(output, "      \"path\": \"{}\",", json_escape(&route.path))
                 .expect("writing to String cannot fail");
+            writeln!(output, "      \"state\": [").expect("writing to String cannot fail");
+            for (state_index, state) in route.state.iter().enumerate() {
+                write_state(&mut output, state, 8);
+                if state_index + 1 < route.state.len() {
+                    output.push(',');
+                }
+                output.push('\n');
+            }
+            writeln!(output, "      ],").expect("writing to String cannot fail");
             writeln!(output, "      \"queries\": [").expect("writing to String cannot fail");
             for (query_index, query) in route.queries.iter().enumerate() {
                 write_query(&mut output, query, 8);
@@ -180,6 +266,30 @@ fn write_query(output: &mut String, query: &UiQueryManifest, indent: usize) {
     output.push_str("]}");
 }
 
+fn write_state(output: &mut String, state: &UiStateManifest, indent: usize) {
+    let pad = " ".repeat(indent);
+    write!(
+        output,
+        "{pad}{{\"id\":\"{}\",\"initial\":",
+        json_escape(&state.id)
+    )
+    .expect("writing to String cannot fail");
+    write_state_value(output, &state.initial);
+    output.push('}');
+}
+
+fn write_state_value(output: &mut String, value: &UiStateValue) {
+    match value {
+        UiStateValue::String(value) => {
+            write!(output, "\"{}\"", json_escape(value)).expect("writing to String cannot fail");
+        }
+        UiStateValue::Integer(value) => {
+            write!(output, "{value}").expect("writing to String cannot fail");
+        }
+        UiStateValue::Null => output.push_str("null"),
+    }
+}
+
 fn write_component(output: &mut String, component: &UiComponentManifest, indent: usize) {
     let pad = " ".repeat(indent);
     write!(output, "{pad}{{\"id\":\"{}\",", json_escape(&component.id))
@@ -194,14 +304,23 @@ fn write_component(output: &mut String, component: &UiComponentManifest, indent:
             )
             .expect("writing to String cannot fail");
         }
-        UiComponentKind::Field { label, binding } => {
+        UiComponentKind::Field {
+            label,
+            binding,
+            fallback,
+        } => {
             write!(
                 output,
-                "\"kind\":\"Field\",\"label\":\"{}\",\"binding\":\"{}\"}}",
+                "\"kind\":\"Field\",\"label\":\"{}\",\"binding\":\"{}\"",
                 json_escape(label),
                 json_escape(binding)
             )
             .expect("writing to String cannot fail");
+            if let Some(fallback) = fallback {
+                write!(output, ",\"fallback\":\"{}\"", json_escape(fallback))
+                    .expect("writing to String cannot fail");
+            }
+            output.push('}');
         }
         UiComponentKind::Table { binding } => {
             write!(
@@ -211,6 +330,57 @@ fn write_component(output: &mut String, component: &UiComponentManifest, indent:
             )
             .expect("writing to String cannot fail");
         }
+        UiComponentKind::Select {
+            label,
+            state,
+            options,
+        } => {
+            write!(
+                output,
+                "\"kind\":\"Select\",\"label\":\"{}\",\"state\":\"{}\",\"options\":[",
+                json_escape(label),
+                json_escape(state)
+            )
+            .expect("writing to String cannot fail");
+            for (index, option) in options.iter().enumerate() {
+                write!(
+                    output,
+                    "{{\"label\":\"{}\",\"value\":",
+                    json_escape(&option.label)
+                )
+                .expect("writing to String cannot fail");
+                write_state_value(output, &option.value);
+                output.push('}');
+                if index + 1 < options.len() {
+                    output.push(',');
+                }
+            }
+            output.push_str("]}");
+        }
+        UiComponentKind::Pagination {
+            state,
+            page_binding,
+            page_size_binding,
+            total_binding,
+        } => {
+            write!(
+                output,
+                "\"kind\":\"Pagination\",\"state\":\"{}\",\"page\":\"{}\",\"pageSize\":\"{}\",\"total\":\"{}\"}}",
+                json_escape(state),
+                json_escape(page_binding),
+                json_escape(page_size_binding),
+                json_escape(total_binding)
+            )
+            .expect("writing to String cannot fail");
+        }
+    }
+}
+
+fn lower_state_value(value: &StateValueIr) -> UiStateValue {
+    match value {
+        StateValueIr::String(value) => UiStateValue::String(value.clone()),
+        StateValueIr::Integer(value) => UiStateValue::Integer(*value),
+        StateValueIr::Null => UiStateValue::Null,
     }
 }
 
@@ -250,6 +420,7 @@ mod tests {
                 pages: vec![PageIr {
                     id: "CustomerDetail".into(),
                     route: "/customers/:customerId".into(),
+                    state: Vec::new(),
                     queries: vec![uiko_core::QueryIr {
                         id: "customers.CustomerDetail.query.customer".into(),
                         alias: "customer".into(),
@@ -278,6 +449,7 @@ mod tests {
                             kind: ComponentKindIr::Field {
                                 label: "Name".into(),
                                 binding: "customer.name".into(),
+                                fallback: None,
                             },
                         },
                     ],
