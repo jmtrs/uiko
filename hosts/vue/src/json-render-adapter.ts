@@ -1,7 +1,7 @@
 import type { UiRoute } from "./manifest";
 
 export interface JsonRenderElement {
-  type: "Stack" | "Text" | "Field" | "Table";
+  type: "Stack" | "Text" | "Field" | "Table" | "Select" | "Pagination";
   props: Record<string, unknown>;
   children: string[];
 }
@@ -39,18 +39,23 @@ export function toJsonRenderSpec(
           children: [],
         };
         break;
-      case "Field":
+      case "Field": {
+        const value = resolveBinding(queryData, component.binding);
         elements[component.id] = {
           type: "Field",
           props: {
             uikoId: component.id,
             label: component.label,
             binding: component.binding,
-            value: resolveBinding(queryData, component.binding),
+            value:
+              value === null || value === undefined
+                ? (component.fallback ?? "")
+                : value,
           },
           children: [],
         };
         break;
+      }
       case "Table": {
         const resolved = resolveBinding(queryData, component.binding);
         elements[component.id] = {
@@ -59,22 +64,48 @@ export function toJsonRenderSpec(
             uikoId: component.id,
             binding: component.binding,
             rows: Array.isArray(resolved) ? resolved : [],
+            columns: component.columns,
           },
           children: [],
         };
         break;
       }
+      case "Select":
+        elements[component.id] = {
+          type: "Select",
+          props: {
+            uikoId: component.id,
+            label: component.label,
+            value: { $bindState: `/${component.state}` },
+            options: component.options,
+          },
+          children: [],
+        };
+        break;
+      case "Pagination":
+        elements[component.id] = {
+          type: "Pagination",
+          props: {
+            uikoId: component.id,
+            pageValue: { $bindState: `/${component.pageState}` },
+            page: resolveBinding(queryData, component.page),
+            pageSize: resolveBinding(queryData, component.pageSize),
+            total: resolveBinding(queryData, component.total),
+          },
+          children: [],
+        };
+        break;
     }
   }
 
   return {
     root,
     elements,
-    state: {},
+    state: route.state,
   };
 }
 
-function resolveBinding(
+export function resolveBinding(
   queryData: Readonly<Record<string, unknown>>,
   binding: string,
 ): unknown {
@@ -85,6 +116,25 @@ function resolveBinding(
 
   let value: unknown = queryData[alias];
   for (const segment of path) {
+    if (
+      typeof value !== "object" ||
+      value === null ||
+      Array.isArray(value) ||
+      !(segment in value)
+    ) {
+      return undefined;
+    }
+    value = (value as Record<string, unknown>)[segment];
+  }
+  return value;
+}
+
+export function resolveRowBinding(
+  row: Readonly<Record<string, unknown>>,
+  binding: string,
+): unknown {
+  let value: unknown = row;
+  for (const segment of binding.split(".")) {
     if (
       typeof value !== "object" ||
       value === null ||
