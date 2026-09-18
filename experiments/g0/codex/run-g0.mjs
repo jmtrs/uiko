@@ -127,6 +127,7 @@ async function main() {
         browser: environment.browser,
         npm: environment.npm,
         codexExecutableSha256: environment.codex.sha256,
+        codexLauncherSha256: environment.codex.launcherSha256,
         experimentLockRevision: lockRevision,
       },
     });
@@ -154,6 +155,8 @@ async function main() {
           prerequisiteRevision: prepared.prerequisiteRevision,
           baseRevision: prepared.baseRevision,
           codexVersion: environment.codex.versionOutput,
+          codexLauncherExecutable: environment.codex.launcherExecutable,
+          codexLauncherSha256: environment.codex.launcherSha256,
           codexExecutable: environment.codex.executable,
           codexExecutableSha256: environment.codex.sha256,
           codexArgs,
@@ -378,9 +381,15 @@ function validateExperimentLock(lock, adapterLock, arm, taskId) {
     typeof lock.agent.model !== "string" ||
     lock.agent.model.length === 0 ||
     typeof lock.agent.reasoningEffort !== "string" ||
-    lock.agent.reasoningEffort.length === 0
+    lock.agent.reasoningEffort.length === 0 ||
+    typeof lock.agent.codexLauncherSha256 !== "string" ||
+    lock.agent.codexLauncherSha256.length === 0 ||
+    typeof lock.agent.codexExecutableSha256 !== "string" ||
+    lock.agent.codexExecutableSha256.length === 0
   ) {
-    throw new Error("experiment lock must contain an explicit model and reasoning effort");
+    throw new Error(
+      "experiment lock must contain explicit model, reasoning effort, and Codex executable identities",
+    );
   }
   if (typeof lock.taskBases?.[arm]?.[taskId] !== "string") {
     throw new Error(`experiment lock has no task base for ${arm}/${taskId}`);
