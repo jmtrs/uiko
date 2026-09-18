@@ -20,6 +20,8 @@ npx playwright install chromium
 
 node run-acceptance.mjs --arm B_FULL --task G0-D01 --repo ../../..
 node run-acceptance.mjs --arm C_UIKO --task G0-D01 --repo ../../..
+node run-acceptance.mjs --arm R_RENDER_ONLY --task G0-D01 --repo ../../..
+node run-acceptance.mjs --arm T_AUTHORING --task G0-D01 --repo ../../..
 ```
 
 For a measured run:
@@ -34,7 +36,7 @@ node run-acceptance.mjs \
 
 ## Shared semantics
 
-Both primary arms use:
+All registered arms use:
 
 - the same deterministic fixture API on port 4317;
 - the same customer/order records;
@@ -45,8 +47,10 @@ Both primary arms use:
 
 Only launch plumbing differs:
 
-- B_FULL receives the fixture base URL through `VITE_API_BASE_URL`;
-- C_UIKO compiles its UiManifest, starts the uiko G0 gateway against the same fixture, and serves the Vue host.
+- B_FULL receives the fixture base URL through `VITE_API_BASE_URL`.
+- C_UIKO compiles authored JSONC, starts the uiko G0 gateway against the same fixture, and serves the Vue host.
+- R_RENDER_ONLY keeps conventional React routing/query/state and uses the frozen json-render React catalog for visual rendering.
+- T_AUTHORING typechecks the authored TypeScript object, mechanically lowers it into generated UIKO JSONC, then uses the same compiler/gateway/Vue-host path as C_UIKO.
 
 Acceptance intentionally avoids framework-private selectors. It uses roles, labels, visible data and fixture request evidence. D01/D02 additionally inspect measured source paths to reject hard-coded fixture/customer IDs.
 

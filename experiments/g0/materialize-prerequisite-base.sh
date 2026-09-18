@@ -52,6 +52,10 @@ case "$arm" in
     arm_root="$repo_root/experiments/controls/r-render-only"
     rm -rf "$arm_root/src/features"
     ;;
+  T_AUTHORING)
+    arm_root="$repo_root/experiments/controls/t-authoring"
+    rm -rf "$arm_root/generated"
+    ;;
   *)
     echo "materialization for arm $arm is not implemented yet" >&2
     exit 2

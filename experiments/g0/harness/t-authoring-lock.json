@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "status": "frozen-g0-v1",
+  "arm": "T_AUTHORING",
+  "purpose": "Authoring-language mechanism probe: typed TypeScript object source lowered mechanically into generated UIKO JSONC, then compiled by the real UIKO pipeline.",
+  "runtime": {
+    "node": "24.21.0",
+    "npm": "11.19.0",
+    "typescript": "5.9.3"
+  },
+  "measuredSource": "experiments/controls/t-authoring/app.ts",
+  "generatedRoot": "experiments/controls/t-authoring/generated",
+  "rules": [
+    "The TypeScript facade expresses UIKO source concepts but does not implement semantic validation.",
+    "The lowerer only transpiles and structurally serializes authored modules/pages.",
+    "Generated JSONC must pass through the real UIKO project loader and compiler.",
+    "Generated files never count as authored application change under the frozen path policy."
+  ]
+}

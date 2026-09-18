@@ -383,7 +383,9 @@ async function measuredSourceText(repoRoot, arm) {
             join(repoRoot, "experiments/controls/r-render-only/src"),
             join(repoRoot, "experiments/controls/r-render-only/ui"),
           ]
-        : [
+        : arm === "T_AUTHORING"
+          ? [join(repoRoot, "experiments/controls/t-authoring/app.ts")]
+          : [
             join(repoRoot, "fixtures/support-console/uiko.jsonc"),
             join(repoRoot, "fixtures/support-console/features"),
           ];
