@@ -2,24 +2,10 @@
 
 use std::collections::BTreeSet;
 
-use uiko_core::{AppIr, ComponentIr, Located, ModuleIr, TextSpan};
+use uiko_core::{AppIr, ComponentIr, Diagnostic, Located, ModuleIr, Severity};
 use uiko_source::{AppSource, ComponentSource};
 
 pub const SUPPORTED_SPEC_VERSION: u32 = 1;
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum Severity {
-    Error,
-    Warning,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct Diagnostic {
-    pub code: &'static str,
-    pub severity: Severity,
-    pub message: String,
-    pub span: TextSpan,
-}
 
 /// Compile already-located source DTOs into the first canonical IR skeleton.
 ///
@@ -96,7 +82,7 @@ mod tests {
     use uiko_core::{Located, ModuleId, SourceId, TextSpan};
     use uiko_source::{AppSource, ComponentSource, ModuleSource};
 
-    use super::{compile, SUPPORTED_SPEC_VERSION};
+    use super::{SUPPORTED_SPEC_VERSION, compile};
 
     fn located(app: AppSource) -> Located<AppSource> {
         Located::new(app, TextSpan::new(SourceId::new("uiko.jsonc"), 0, 10))

@@ -3,6 +3,11 @@
 version = 4
 
 [[package]]
+name = "jsonc-parser"
+version = "0.33.2"
+source = "git+https://github.com/dprint/jsonc-parser?tag=0.33.2#e6e383704fd9a5b5e14d2de84cab0e3fcf187ecb"
+
+[[package]]
 name = "uiko-cli"
 version = "0.0.1"
 
@@ -23,4 +28,13 @@ name = "uiko-source"
 version = "0.0.1"
 dependencies = [
  "uiko-core",
+]
+
+[[package]]
+name = "uiko-source-jsonc"
+version = "0.0.1"
+dependencies = [
+ "jsonc-parser",
+ "uiko-core",
+ "uiko-source",
 ]

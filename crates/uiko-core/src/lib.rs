@@ -51,6 +51,34 @@ impl<T> Located<T> {
     }
 }
 
+/// Stable diagnostic severity shared by source adapters and semantic passes.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Severity {
+    Error,
+    Warning,
+}
+
+/// Machine-readable diagnostic emitted by uiko-owned compilation stages.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Diagnostic {
+    pub code: &'static str,
+    pub severity: Severity,
+    pub message: String,
+    pub span: TextSpan,
+}
+
+impl Diagnostic {
+    #[must_use]
+    pub fn error(code: &'static str, message: impl Into<String>, span: TextSpan) -> Self {
+        Self {
+            code,
+            severity: Severity::Error,
+            message: message.into(),
+            span,
+        }
+    }
+}
+
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct ModuleId(String);
 

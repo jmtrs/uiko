@@ -1,0 +1,14 @@
+[package]
+name = "uiko-source-jsonc"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+jsonc-parser = { git = "https://github.com/dprint/jsonc-parser", tag = "0.33.2", features = ["cst"] }
+uiko-core = { path = "../uiko-core" }
+uiko-source = { path = "../uiko-source" }
+
+[lints]
+workspace = true
