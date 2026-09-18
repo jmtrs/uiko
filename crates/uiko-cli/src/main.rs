@@ -1,6 +1,6 @@
 #![forbid(unsafe_code)]
 
-use std::{fmt::Write as _, fs, path::PathBuf, process::ExitCode};
+use std::{fmt::Write as _, fs, path::{Path, PathBuf}, process::ExitCode};
 
 use uiko_compiler::compile;
 use uiko_core::{AppIr, Diagnostic, Severity};
@@ -160,7 +160,7 @@ fn build(args: &[String]) -> ExitCode {
     ExitCode::SUCCESS
 }
 
-fn compile_project(project: &PathBuf) -> Result<AppIr, Vec<Diagnostic>> {
+fn compile_project(project: &Path) -> Result<AppIr, Vec<Diagnostic>> {
     let source = load_project(project)?;
     compile(&source)
 }
