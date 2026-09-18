@@ -2,7 +2,7 @@
   "id": "CustomerList",
   "route": "/customers",
   "components": [
-    { "type": "Text", "value": "Customers" },
-    { "type": "Table", "binding": "customers" }
+    { "id": "title", "type": "Text", "value": "Customers" },
+    { "id": "table", "type": "Table", "binding": "customers" }
   ]
 }
