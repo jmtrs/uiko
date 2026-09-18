@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 
-import { prepareExecutionBase } from "../codex/prepare-base.mjs";
+import { prepareExecutionBase } from "../prepare-base.mjs";
 
 const CASES = [
   { arm: "C_UIKO", successorTask: "G0-D03", predecessorTask: "G0-D01" },
