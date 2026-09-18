@@ -1,0 +1,6 @@
+{
+  "name": "support-console",
+  "specVersion": 1,
+  "modules": ["./features/customers"],
+  "integrations": ["./integrations/crm.jsonc"]
+}
