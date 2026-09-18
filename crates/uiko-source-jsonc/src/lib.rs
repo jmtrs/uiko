@@ -57,10 +57,7 @@ pub fn parse_module_config(
     )
 }
 
-pub fn parse_page(
-    source_id: SourceId,
-    text: &str,
-) -> Result<Located<PageSource>, Vec<Diagnostic>> {
+pub fn parse_page(source_id: SourceId, text: &str) -> Result<Located<PageSource>, Vec<Diagnostic>> {
     let object = parse_root_object(&source_id, text)?;
     let mut diagnostics = validate_properties(&object, &PAGE_FIELDS, "page", &source_id);
     let id = parse_required_string(&object, "id", &source_id, &mut diagnostics);
@@ -407,13 +404,15 @@ mod tests {
         let name = &parsed.value.name.span;
         assert_eq!(&source[name.start..name.end], r#""support-console""#);
         let module = &parsed.value.modules[0].span;
-        assert_eq!(&source[module.start..module.end], r#""./features/customers""#);
+        assert_eq!(
+            &source[module.start..module.end],
+            r#""./features/customers""#
+        );
     }
 
     #[test]
     fn unknown_and_duplicate_properties_fail_closed() {
-        let unknown =
-            r#"{ "name": "x", "specVersion": 1, "modules": [], "surprise": true }"#;
+        let unknown = r#"{ "name": "x", "specVersion": 1, "modules": [], "surprise": true }"#;
         assert!(
             parse_app_config(SourceId::new("uiko.jsonc"), unknown)
                 .unwrap_err()
@@ -421,8 +420,7 @@ mod tests {
                 .any(|diagnostic| diagnostic.code == "UIKO1007")
         );
 
-        let duplicate =
-            r#"{ "name": "x", "name": "y", "specVersion": 1, "modules": [] }"#;
+        let duplicate = r#"{ "name": "x", "name": "y", "specVersion": 1, "modules": [] }"#;
         assert!(
             parse_app_config(SourceId::new("uiko.jsonc"), duplicate)
                 .unwrap_err()
