@@ -53,9 +53,10 @@ node experiments/g0/codex/freeze-lock.mjs \
   --reasoning-effort high
 ```
 
-The defaults are `gpt-6-astra` with `high` reasoning. Codex CLI 0.155.0
-supports that pair. The stronger quality-first model is used identically across
-paired arms; subagents remain disabled by the adapter lock.
+The documented G0 choice is `gpt-6-astra` with `high` reasoning, and both
+arguments are required explicitly by the freezer. Codex CLI 0.155.0 supports
+that pair. The same model/effort is used identically across paired arms;
+subagents remain disabled by the adapter lock.
 
 The freezer:
 
