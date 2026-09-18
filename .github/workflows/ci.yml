@@ -35,3 +35,35 @@ jobs:
         run: |
           test ! -d experiments/tasks/holdout || \
             ! find experiments/tasks/holdout -type f \( -name '*.json' -o -name '*.md' \) | grep -q .
+      - name: Frozen G0 manifests are valid JSON
+        run: |
+          jq empty \
+            baselines/b-full/package.json \
+            baselines/b-full/stack-lock.json \
+            experiments/tasks/dev-manifest.json \
+            experiments/fixtures/g0-support-api.openapi.json \
+            experiments/g0/path-policy.json \
+            experiments/g0/run-result.schema.json \
+            experiments/g0/run-template.json
+      - name: G0 task set and probes are frozen
+        run: |
+          jq -e '
+            .status == "frozen-g0-v1"
+            and (.tasks | length) == 6
+            and ([.tasks[].id] | unique | length) == 6
+            and ([.tasks[] | select(.probes | index("R_RENDER_ONLY"))] | length) >= 3
+            and ([.tasks[] | select(.probes | index("T_AUTHORING"))] | length) >= 3
+          ' experiments/tasks/dev-manifest.json > /dev/null
+      - name: B-full stack uses exact frozen versions
+        run: |
+          jq -e '.status == "frozen-g0-v1" and .freezeRules.exactVersionsOnly == true' \
+            baselines/b-full/stack-lock.json > /dev/null
+          jq -e '
+            ([.dependencies[], .devDependencies[]] | all(test("^[0-9]+\\.[0-9]+\\.[0-9]+$")))
+          ' baselines/b-full/package.json > /dev/null
+      - name: G0 contract and metric policy are frozen
+        run: |
+          jq -e '.openapi == "3.1.0" and .info.version == "1.0.0"' \
+            experiments/fixtures/g0-support-api.openapi.json > /dev/null
+          jq -e '.status == "frozen-g0-v1" and .tokenization.id == "unicode-lexical-v1"' \
+            experiments/g0/path-policy.json > /dev/null

@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "status": "frozen-g0-v1",
+  "frozenAt": "2026-09-18",
+  "selectionRule": "Prefer a current maintained, widely adopted stable line over a freshly released major when the newer major could handicap the conventional baseline through ecosystem or agent-familiarity churn.",
+  "runtime": {
+    "node": "24.21.0",
+    "npm": "11.19.0"
+  },
+  "application": {
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "react-router-dom": "7.18.4",
+    "@tanstack/react-query": "5.103.1",
+    "zod": "4.5.4",
+    "openapi-fetch": "0.17.0",
+    "@mui/material": "7.3.11",
+    "@emotion/react": "11.14.0",
+    "@emotion/styled": "11.14.1"
+  },
+  "tooling": {
+    "vite": "7.3.6",
+    "@vitejs/plugin-react": "5.2.0",
+    "typescript": "6.0.3",
+    "openapi-typescript": "7.13.0",
+    "eslint": "10.10.0",
+    "typescript-eslint": "8.70.0",
+    "@playwright/test": "1.63.0",
+    "@types/react": "19.2.18",
+    "@types/react-dom": "19.2.4"
+  },
+  "freezeRules": {
+    "exactVersionsOnly": true,
+    "noAsymmetricUpgrades": true,
+    "postFirstRunChangesRequireProtocolDeviation": true
+  }
+}
