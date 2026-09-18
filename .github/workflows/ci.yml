@@ -16,6 +16,8 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
+      - name: Lockfile is current
+        run: cargo metadata --locked --no-deps > /dev/null
       - name: Format
         run: cargo fmt --check
       - name: Clippy
@@ -32,4 +34,4 @@ jobs:
       - name: Hold-out tasks are not committed in plaintext task files
         run: |
           test ! -d experiments/tasks/holdout || \
-            ! find experiments/tasks/holdout -type f -name '*.json' -o -name '*.md' | grep -q .
+            ! find experiments/tasks/holdout -type f \( -name '*.json' -o -name '*.md' \) | grep -q .

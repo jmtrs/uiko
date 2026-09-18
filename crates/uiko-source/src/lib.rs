@@ -1,8 +1,19 @@
 #![forbid(unsafe_code)]
 
-use uiko_core::ModuleId;
+use uiko_core::{Located, ModuleId};
 
-/// Authoring-neutral source DTO. JSONC is one front-end that will lower into this model.
+/// Root project source before module paths are loaded and resolved.
+///
+/// Authoring adapters lower their syntax into this DTO. It intentionally
+/// contains no JSONC-specific types.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct AppConfigSource {
+    pub name: Located<String>,
+    pub spec_version: Located<u32>,
+    pub modules: Vec<Located<String>>,
+}
+
+/// Authoring-neutral assembled source model consumed by semantic compilation.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AppSource {
     pub name: String,
