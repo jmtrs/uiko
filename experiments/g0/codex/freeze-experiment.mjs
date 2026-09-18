@@ -6,7 +6,7 @@ import { dirname, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 
 import { inspectEnvironment } from "./environment.mjs";
-import { prepareExecutionBase } from "./prepare-base.mjs";
+import { prepareExecutionBase } from "../prepare-base.mjs";
 
 const REQUIRED_NPM_LOCKS = [
   "experiments/g0/harness/package-lock.json",

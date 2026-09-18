@@ -10,7 +10,7 @@ import { inspectEnvironment, assertEnvironmentMatches, runCapture } from "./envi
 import {
   cleanupHarnessArtifacts,
   prepareExecutionBase,
-} from "./prepare-base.mjs";
+} from "../prepare-base.mjs";
 import {
   buildCodexArgs,
   runCodexTurn,
