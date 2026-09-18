@@ -29,3 +29,19 @@ Frozen graph:
 The mechanism probes use the same dependency semantics for D01, D02 and D05.
 
 No measured G0 run preceded this clarification.
+
+
+## 2026-09-18: T_AUTHORING shares the UIKO core/runtime boundary
+
+T_AUTHORING changes only the authoring representation. Its generated JSONC is compiled and executed by the same UIKO compiler, gateway and Vue host used by C_UIKO.
+
+Therefore the T_AUTHORING core-owned boundary includes the same UIKO implementation paths as C_UIKO:
+
+- `crates/**`
+- `docs/**`
+- `hosts/**`
+- `Cargo.toml`
+- `Cargo.lock`
+- `rust-toolchain.toml`
+
+Without this clarification, a measured T_AUTHORING run could edit the shared host/runtime and have that work classified as `Other` instead of core modification. No measured G0 run preceded this correction.
