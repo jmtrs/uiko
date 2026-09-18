@@ -40,3 +40,26 @@ Each run starts with the exact frozen task prompt. After the Codex turn, the sha
 If acceptance fails, the next Codex turn receives only deterministic harness failure evidence. No human implementation hint is injected. The frozen run budget is four Codex turns total.
 
 The trace remains open after the loop. Repair categories are reviewed separately before `run_end` and aggregation.
+
+
+## Freeze the measured environment
+
+Run the freezer from a clean checkout of the exact revision that will be measured:
+
+```bash
+node experiments/g0/codex/freeze-experiment.mjs \
+  --provider openai \
+  --model <EXACT_CODEX_MODEL> \
+  --model-version <PROVIDER_MODEL_VERSION_OR_SNAPSHOT> \
+  --reasoning-effort <EFFORT>
+```
+
+The freezer:
+
+- requires a clean repository;
+- runs predecessor acceptance preflight for every non-empty prerequisite edge;
+- fingerprints Codex, Node, npm, Rust and Chromium;
+- reconstructs every applicable task execution base and records its exact SHA;
+- writes `experiments/g0/experiment-lock.json`.
+
+Commit the generated lock before the first measured run. Its `harnessRevision` intentionally points to the preceding code revision, so the lock commit itself cannot change the measured harness.
