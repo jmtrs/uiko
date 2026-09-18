@@ -2,7 +2,7 @@ import { spawnSync } from "node:child_process";
 import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
 
 import { inspectEnvironment, assertEnvironmentMatches, runCapture } from "./environment.mjs";
@@ -329,7 +329,7 @@ async function frozenTask(repoRoot, taskId, arm) {
   return task;
 }
 
-function validateExperimentLock(
+export function validateExperimentLock(
   lock,
   adapterLock,
   prerequisiteManifest,
@@ -376,7 +376,7 @@ function validateExperimentLock(
   }
 }
 
-function predecessorTaskForStage(stage) {
+export function predecessorTaskForStage(stage) {
   const mapping = {
     D01: "G0-D01",
     D02: "G0-D02",
@@ -547,4 +547,9 @@ function positiveInteger(value, option) {
   return parsed;
 }
 
-await main();
+if (
+  process.argv[1] &&
+  import.meta.url === pathToFileURL(resolve(process.argv[1])).href
+) {
+  await main();
+}
