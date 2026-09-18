@@ -43,7 +43,7 @@ for (const p of [outDir, worktree]) {
 fs.mkdirSync(outDir, { recursive: true });
 
 function run(cmd, cwd = repoRoot, opts = {}) {
-  const r = spawnSync(cmd, {
+  const r = spawnSync(cmd[0], cmd.slice(1), {
     cwd,
     encoding: "utf8",
     ...opts,
