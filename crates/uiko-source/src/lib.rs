@@ -13,18 +13,32 @@ pub struct AppConfigSource {
     pub modules: Vec<Located<String>>,
 }
 
+/// Module declaration before referenced page files are loaded.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ModuleConfigSource {
+    pub id: Located<String>,
+    pub pages: Vec<Located<String>>,
+}
+
 /// Authoring-neutral assembled source model consumed by semantic compilation.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AppSource {
     pub name: String,
     pub spec_version: u32,
-    pub modules: Vec<ModuleSource>,
+    pub modules: Vec<Located<ModuleSource>>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ModuleSource {
-    pub id: ModuleId,
-    pub components: Vec<ComponentSource>,
+    pub id: Located<ModuleId>,
+    pub pages: Vec<Located<PageSource>>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PageSource {
+    pub id: Located<String>,
+    pub route: Located<String>,
+    pub components: Vec<Located<ComponentSource>>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
