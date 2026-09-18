@@ -160,6 +160,7 @@ jobs:
       - name: D05 prerequisite is deterministic and executable
         run: |
           base="$(git rev-parse HEAD)"
+          rm -f package-lock.json src/api/generated/schema.d.ts
           first="$(bash ../../g0/materialize-prerequisite-base.sh R_RENDER_ONLY G0-D05 ../../..)"
           npm run generate:api
           npm run typecheck
