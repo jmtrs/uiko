@@ -40,6 +40,9 @@
       "D01": "experiments/g0/prerequisites/C_UIKO/D01",
       "D02": "experiments/g0/prerequisites/C_UIKO/D02",
       "D03": "experiments/g0/prerequisites/C_UIKO/D03"
+    },
+    "R_RENDER_ONLY": {
+      "D03": "experiments/g0/prerequisites/R_RENDER_ONLY/D03"
     }
   },
   "syntheticCommit": {
