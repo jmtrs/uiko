@@ -22,6 +22,36 @@ The frozen stack is:
 - ESLint 10.10.0 + typescript-eslint 8.70.0
 - Playwright Test 1.63.0
 
+## Frozen executable base
+
+The measured B_FULL base is deliberately strong but task-neutral.
+
+Already wired before a task prompt:
+
+- React/Vite bootstrapping
+- BrowserRouter
+- TanStack Query provider
+- typed `openapi-fetch` client
+- generated types from the shared frozen OpenAPI contract
+- Material UI
+- strict TypeScript and ESLint
+
+The base contains **no customer route or D01-D06 behavior**. Adding routes, queries, projections, filters, pagination and related-order UI remains task-local work.
+
+The API client reads `VITE_API_BASE_URL` and otherwise uses same-origin. A task does not choose or hard-code the harness upstream address.
+
+## Validate the base
+
+```bash
+npm install --ignore-scripts --no-audit --no-fund
+npm run generate:api
+npm run typecheck
+npm run lint
+npm run build
+```
+
+Generated API types and package/build outputs are excluded by the frozen path policy.
+
 ## Fairness rules
 
 B-full is not a naive baseline. It may use idiomatic abstractions, generated OpenAPI types, typed fetch helpers, query-key helpers and normal component extraction where a competent 2026 React team would use them.
