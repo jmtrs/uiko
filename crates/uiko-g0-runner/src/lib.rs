@@ -503,7 +503,7 @@ struct FinalMeasurements {
 
 struct AggregationState<'a> {
     repo_root: &'a Path,
-    base_revision: &'a str,
+    base_revision: String,
     classifier: &'a PathClassifier,
     base_cache: BTreeMap<String, Option<String>>,
     last_after: BTreeMap<String, Option<String>>,
@@ -526,7 +526,7 @@ struct AggregationState<'a> {
 }
 
 impl<'a> AggregationState<'a> {
-    fn new(repo_root: &'a Path, base_revision: &'a str, classifier: &'a PathClassifier) -> Self {
+    fn new(repo_root: &'a Path, base_revision: String, classifier: &'a PathClassifier) -> Self {
         Self {
             repo_root,
             base_revision,
@@ -633,7 +633,7 @@ impl<'a> AggregationState<'a> {
         let expected_before = if let Some(previous) = self.last_after.get(&path) {
             previous.clone()
         } else {
-            let base = base_content(self.repo_root, self.base_revision, &path)?;
+            let base = base_content(self.repo_root, &self.base_revision, &path)?;
             self.base_cache.insert(path.clone(), base.clone());
             base
         };
@@ -690,7 +690,7 @@ impl<'a> AggregationState<'a> {
     }
 
     fn measure_final_state(&mut self) -> Result<FinalMeasurements, String> {
-        let final_paths = changed_paths(self.repo_root, self.base_revision)?;
+        let final_paths = changed_paths(self.repo_root, &self.base_revision)?;
         let mut measurements = FinalMeasurements {
             accepted_change_tokens: 0,
             changed_bytes: 0,
@@ -702,7 +702,7 @@ impl<'a> AggregationState<'a> {
             let before = if let Some(cached) = self.base_cache.get(path) {
                 cached.clone()
             } else {
-                base_content(self.repo_root, self.base_revision, path)?
+                base_content(self.repo_root, &self.base_revision, path)?
             };
             let after = worktree_content(self.repo_root, path)?;
             let before_text = before.as_deref().unwrap_or("");
