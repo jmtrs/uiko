@@ -89,6 +89,7 @@ export async function runCodexTurn({
   rawStderrPath,
   observer,
   traceWriter,
+  timeoutMs,
 }) {
   const raw = createWriteStream(rawJsonlPath, { flags: "w" });
   const stderr = createWriteStream(rawStderrPath, { flags: "w" });
@@ -98,6 +99,13 @@ export async function runCodexTurn({
     env: process.env,
     stdio: ["ignore", "pipe", "pipe"],
   });
+
+  let timedOut = false;
+  const timeout = setTimeout(() => {
+    timedOut = true;
+    child.kill("SIGTERM");
+  }, timeoutMs);
+  timeout.unref();
 
   child.stderr.pipe(stderr);
   const lines = createInterface({ input: child.stdout, crlfDelay: Infinity });
@@ -136,10 +144,10 @@ export async function runCodexTurn({
     child.once("error", reject);
     child.once("close", (code) => resolve(code ?? 1));
   });
+  clearTimeout(timeout);
 
   await observer.boundary();
-  raw.end();
-  stderr.end();
+  await Promise.all([endStream(raw), endStream(stderr)]);
 
   if (parseErrors > 0) {
     await traceWriter.append({
@@ -150,7 +158,7 @@ export async function runCodexTurn({
     });
   }
 
-  return { exitCode, threadId, finalMessage, parseErrors };
+  return { exitCode, threadId, finalMessage, parseErrors, timedOut };
 }
 
 export function buildCodexArgs(lock, model, reasoningEffort) {
@@ -292,6 +300,13 @@ async function translateTelemetry(event, traceWriter) {
       impact: "invalidating",
     });
   }
+}
+
+function endStream(stream) {
+  return new Promise((resolve, reject) => {
+    stream.once("error", reject);
+    stream.end(resolve);
+  });
 }
 
 function argsForPrompt(args, prompt) {
