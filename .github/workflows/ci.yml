@@ -133,6 +133,32 @@ jobs:
           second_d05="$(bash ../../experiments/g0/materialize-prerequisite-base.sh B_FULL G0-D05 ../..)"
           test "$first_d05" = "$second_d05"
 
+  g0-harness:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: experiments/g0/harness
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.21.0
+      - name: Use frozen npm
+        run: |
+          npm install --global npm@11.19.0
+          test "$(npm --version)" = "11.19.0"
+      - name: Install exact harness dependency
+        run: npm install --ignore-scripts --no-audit --no-fund
+      - name: JavaScript syntax
+        run: |
+          for file in *.mjs; do
+            node --check "$file"
+          done
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Fixture and browser smoke
+        run: npm run smoke
+
   repository-invariants:
     runs-on: ubuntu-latest
     steps:
@@ -152,11 +178,19 @@ jobs:
             experiments/fixtures/g0-support-api.openapi.json \
             experiments/g0/path-policy.json \
             experiments/g0/prerequisite-bases.json \
+            experiments/g0/harness/package.json \
             experiments/g0/run-result.schema.json \
             experiments/g0/trace-event.schema.json \
             experiments/g0/run-template.json \
             hosts/vue/package.json \
             hosts/vue/tsconfig.json
+      - name: G0 acceptance harness uses frozen Playwright
+        run: |
+          jq -e '
+            .engines.node == "24.21.0"
+            and .packageManager == "npm@11.19.0"
+            and .devDependencies["@playwright/test"] == "1.63.0"
+          ' experiments/g0/harness/package.json > /dev/null
       - name: G0 prerequisite graph is explicit and materializer is valid shell
         run: |
           bash -n experiments/g0/materialize-prerequisite-base.sh
