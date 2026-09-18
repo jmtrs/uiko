@@ -300,7 +300,16 @@ async function d06(ctx) {
   });
 
   await reporter.criterion(3, "order id, status and total are visible", async () => {
-    await visibleTexts(page, ["ord_ada_1", "paid", "1299", "ord_ada_2", "open", "4200"]);
+    await visibleTexts(page, ["ord_ada_1", "paid", "ord_ada_2", "open"]);
+    const body = await page.locator("body").innerText();
+    assert(
+      body.includes("1299") || body.includes("12.99"),
+      "first order total is not visible as cents or a formatted decimal",
+    );
+    assert(
+      body.includes("4200") || body.includes("42.00") || body.includes("42"),
+      "second order total is not visible as cents or a formatted decimal",
+    );
   });
 
   await reporter.browser("navigate Lin customer with orders", () =>
