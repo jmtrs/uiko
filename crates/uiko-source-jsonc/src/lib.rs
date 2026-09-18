@@ -9,7 +9,9 @@ use jsonc_parser::{
     parse_to_ast,
 };
 use uiko_core::{Diagnostic, Located, SourceId, TextSpan};
-use uiko_source::{AppConfigSource, ComponentKindSource, ComponentSource, ModuleConfigSource, PageSource};
+use uiko_source::{
+    AppConfigSource, ComponentKindSource, ComponentSource, ModuleConfigSource, PageSource,
+};
 
 const APP_FIELDS: [&str; 3] = ["name", "specVersion", "modules"];
 const MODULE_FIELDS: [&str; 2] = ["id", "pages"];
