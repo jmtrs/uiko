@@ -26,6 +26,7 @@ class Reporter {
     this.taskId = taskId;
     this.criteria = [];
     this.fatalError = null;
+    this.preflightDiagnostics = null;
     this.identity = trace === undefined ? null : readTraceIdentity(trace, arm, taskId);
   }
 
@@ -124,6 +125,9 @@ class Reporter {
       arm: this.arm,
       success: this.complete(),
       fatalError: this.fatalError,
+      ...(this.preflightDiagnostics === null
+        ? {}
+        : { preflightDiagnostics: this.preflightDiagnostics }),
       criteria: [...this.criteria].sort((left, right) => left.index - right.index),
     };
     process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
@@ -158,6 +162,7 @@ async function main() {
       task: { type: "string" },
       trace: { type: "string" },
       repo: { type: "string" },
+      preflight: { type: "boolean", default: false },
     },
   });
 
@@ -169,10 +174,12 @@ async function main() {
   if (!["B_FULL", "C_UIKO", "R_RENDER_ONLY", "T_AUTHORING"].includes(values.arm)) {
     throw new Error(`unsupported G0 arm ${values.arm}`);
   }
-  if (
+  const unregisteredProbeTask =
     ["R_RENDER_ONLY", "T_AUTHORING"].includes(values.arm) &&
-    !["G0-D01", "G0-D02", "G0-D05"].includes(values.task)
-  ) {
+    !["G0-D01", "G0-D02", "G0-D05"].includes(values.task);
+  const allowedPrerequisiteCheck =
+    values.preflight === true && values.task === "G0-D03";
+  if (unregisteredProbeTask && !allowedPrerequisiteCheck) {
     throw new Error(`task ${values.task} is not registered for ${values.arm}`);
   }
   if (!(values.task in EXPECTED_CRITERIA)) {
@@ -186,12 +193,13 @@ async function main() {
 
   let session;
   let browser;
+  let page;
 
   try {
     session = await launchArm(repoRoot, values.arm);
     browser = await chromium.launch({ headless: true });
     const context = await browser.newContext();
-    const page = await context.newPage();
+    page = await context.newPage();
 
     await runTaskAcceptance({
       repoRoot,
@@ -204,6 +212,9 @@ async function main() {
     });
   } catch (error) {
     reporter.fatalError = error instanceof Error ? error.message : String(error);
+    if (values.preflight === true && page !== undefined) {
+      reporter.preflightDiagnostics = await collectPreflightDiagnostics(page);
+    }
   } finally {
     await browser?.close().catch(() => {});
     await session?.stop().catch(() => {});
@@ -214,6 +225,30 @@ async function main() {
 
   if (!reporter.complete()) {
     process.exitCode = 1;
+  }
+}
+
+async function collectPreflightDiagnostics(page) {
+  try {
+    const host = page.locator("[data-uiko-host]").first();
+    const queryError = page.locator("[data-uiko-query-error]").first();
+    return {
+      url: page.url(),
+      bodyText: (await page.locator("body").innerText()).slice(0, 4_000),
+      hostState: (await host.count()) > 0
+        ? await host.getAttribute("data-uiko-host")
+        : null,
+      route: (await host.count()) > 0
+        ? await host.getAttribute("data-uiko-route")
+        : null,
+      queryError: (await queryError.count()) > 0
+        ? await queryError.innerText()
+        : null,
+    };
+  } catch (error) {
+    return {
+      diagnosticError: error instanceof Error ? error.message : String(error),
+    };
   }
 }
 

@@ -1,5 +1,5 @@
 import type { Spec } from "@json-render/core";
-import { Renderer } from "@json-render/react";
+import { JSONUIProvider, Renderer } from "@json-render/react";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 
@@ -76,7 +76,9 @@ export function CustomerListPage() {
       ) : customers.isError ? (
         <p role="alert">Unable to load customers</p>
       ) : (
-        <Renderer spec={spec} registry={registry} />
+        <JSONUIProvider registry={registry} initialState={{}}>
+          <Renderer spec={spec} registry={registry} />
+        </JSONUIProvider>
       )}
     </main>
   );

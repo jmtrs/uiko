@@ -36,9 +36,9 @@ export function CustomerDetailPage() {
         Customer
       </Typography>
       <Stack spacing={1}>
-        <div><strong>Name</strong> {customer.data.name}</div>
-        <div><strong>Email</strong> {customer.data.email}</div>
-        <div><strong>Status</strong> {customer.data.status}</div>
+        <div><strong>Name</strong> <span>{customer.data.name}</span></div>
+        <div><strong>Email</strong> <span>{customer.data.email}</span></div>
+        <div><strong>Status</strong> <span>{customer.data.status}</span></div>
       </Stack>
     </Container>
   );
