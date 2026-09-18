@@ -8,7 +8,7 @@ use std::{
 
 use uiko_capabilities::CapabilityCatalog;
 use uiko_core::{Diagnostic, Located, ModuleId, SourceId, TextSpan};
-use uiko_openapi::{adapter_id, import_openapi_provider};
+use uiko_openapi::{OpenApiTransportCatalog, adapter_id, import_openapi_provider};
 use uiko_source::{AppSource, ModuleSource};
 use uiko_source_jsonc::{
     parse_app_config, parse_integration_config, parse_module_config, parse_page,
@@ -18,6 +18,7 @@ use uiko_source_jsonc::{
 pub struct LoadedProject {
     pub source: Located<AppSource>,
     pub capabilities: CapabilityCatalog,
+    pub openapi_transport: OpenApiTransportCatalog,
 }
 
 /// Load one filesystem-backed uiko project plus its normalized capability contracts.
@@ -55,15 +56,22 @@ pub fn load_project(root: &Path) -> Result<LoadedProject, Vec<Diagnostic>> {
     }
 
     let mut capabilities = CapabilityCatalog::default();
+    let mut openapi_transport = OpenApiTransportCatalog::default();
     for integration_ref in &app_config.value.integrations {
         match load_integration(&root, integration_ref) {
-            Ok(provider) => match capabilities.providers.entry(provider.id.clone()) {
+            Ok(imported) => match capabilities
+                .providers
+                .entry(imported.capabilities.id.clone())
+            {
                 Entry::Vacant(entry) => {
-                    entry.insert(provider);
+                    openapi_transport
+                        .providers
+                        .insert(imported.transport.id.clone(), imported.transport);
+                    entry.insert(imported.capabilities);
                 }
                 Entry::Occupied(_) => diagnostics.push(Diagnostic::error(
                     "UIKO1203",
-                    format!("duplicate integration id `{}`", provider.id),
+                    format!("duplicate integration id `{}`", imported.capabilities.id),
                     integration_ref.span.clone(),
                 )),
             },
@@ -86,13 +94,14 @@ pub fn load_project(root: &Path) -> Result<LoadedProject, Vec<Diagnostic>> {
             app_span,
         ),
         capabilities,
+        openapi_transport,
     })
 }
 
 fn load_integration(
     root: &Path,
     integration_ref: &Located<String>,
-) -> Result<uiko_capabilities::CapabilityProvider, Vec<Diagnostic>> {
+) -> Result<uiko_openapi::ImportedOpenApiProvider, Vec<Diagnostic>> {
     let integration_path = resolve_reference(
         root,
         root,
