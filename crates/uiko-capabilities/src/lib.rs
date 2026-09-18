@@ -20,7 +20,7 @@ pub struct QueryOperation {
     pub output: ValueShape,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub enum ParameterLocation {
     Path,
     Query,
