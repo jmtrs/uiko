@@ -10,6 +10,11 @@ source = "git+https://github.com/dprint/jsonc-parser?tag=0.33.2#e6e383704fd9a5b5
 [[package]]
 name = "uiko-cli"
 version = "0.0.1"
+dependencies = [
+ "uiko-compiler",
+ "uiko-core",
+ "uiko-project",
+]
 
 [[package]]
 name = "uiko-compiler"
@@ -22,6 +27,15 @@ dependencies = [
 [[package]]
 name = "uiko-core"
 version = "0.0.1"
+
+[[package]]
+name = "uiko-project"
+version = "0.0.1"
+dependencies = [
+ "uiko-core",
+ "uiko-source",
+ "uiko-source-jsonc",
+]
 
 [[package]]
 name = "uiko-source"

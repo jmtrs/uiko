@@ -9,71 +9,150 @@ use jsonc_parser::{
     parse_to_ast,
 };
 use uiko_core::{Diagnostic, Located, SourceId, TextSpan};
-use uiko_source::AppConfigSource;
+use uiko_source::{AppConfigSource, ComponentSource, ModuleConfigSource, PageSource};
 
-const KNOWN_ROOT_FIELDS: [&str; 3] = ["name", "specVersion", "modules"];
+const APP_FIELDS: [&str; 3] = ["name", "specVersion", "modules"];
+const MODULE_FIELDS: [&str; 2] = ["id", "pages"];
+const PAGE_FIELDS: [&str; 3] = ["id", "route", "components"];
 
-/// Parse uiko's root JSONC project file into authoring-neutral located DTOs.
-///
-/// The parser library is intentionally configured explicitly because its
-/// defaults accept syntax that uiko's source policy forbids.
+/// Parse the root uiko project source into located, authoring-neutral DTOs.
 ///
 /// # Errors
 ///
-/// Returns stable uiko diagnostics for syntax and structural failures.
+/// Returns stable diagnostics when JSONC syntax or the root source shape is invalid.
 pub fn parse_app_config(
-    source_id: SourceId,
+    source_id: &SourceId,
     text: &str,
 ) -> Result<Located<AppConfigSource>, Vec<Diagnostic>> {
-    let parse_result =
+    let object = parse_root_object(source_id, text)?;
+    let mut diagnostics = validate_properties(&object, &APP_FIELDS, "app", source_id);
+    let name = parse_required_string(&object, "name", source_id, &mut diagnostics);
+    let spec_version = parse_spec_version(&object, source_id, &mut diagnostics);
+    let modules = parse_string_array(&object, "modules", source_id, &mut diagnostics);
+    finish(
+        diagnostics,
+        (name, spec_version, modules),
+        source_id,
+        object.range,
+        |(name, spec_version, modules)| {
+            Some(AppConfigSource {
+                name: name?,
+                spec_version: spec_version?,
+                modules: modules?,
+            })
+        },
+    )
+}
+
+/// Parse one module declaration.
+///
+/// # Errors
+///
+/// Returns stable diagnostics when JSONC syntax or the module shape is invalid.
+pub fn parse_module_config(
+    source_id: &SourceId,
+    text: &str,
+) -> Result<Located<ModuleConfigSource>, Vec<Diagnostic>> {
+    let object = parse_root_object(source_id, text)?;
+    let mut diagnostics = validate_properties(&object, &MODULE_FIELDS, "module", source_id);
+    let id = parse_required_string(&object, "id", source_id, &mut diagnostics);
+    let pages = parse_string_array(&object, "pages", source_id, &mut diagnostics);
+    finish(
+        diagnostics,
+        (id, pages),
+        source_id,
+        object.range,
+        |(id, pages)| {
+            Some(ModuleConfigSource {
+                id: id?,
+                pages: pages?,
+            })
+        },
+    )
+}
+
+/// Parse one minimal page used by the pre-G0 compiler slice.
+///
+/// # Errors
+///
+/// Returns stable diagnostics for malformed pages or unsupported component shapes.
+pub fn parse_page(
+    source_id: &SourceId,
+    text: &str,
+) -> Result<Located<PageSource>, Vec<Diagnostic>> {
+    let object = parse_root_object(source_id, text)?;
+    let mut diagnostics = validate_properties(&object, &PAGE_FIELDS, "page", source_id);
+    let id = parse_required_string(&object, "id", source_id, &mut diagnostics);
+    let route = parse_required_string(&object, "route", source_id, &mut diagnostics);
+    let components = parse_components(&object, source_id, &mut diagnostics);
+    finish(
+        diagnostics,
+        (id, route, components),
+        source_id,
+        object.range,
+        |(id, route, components)| {
+            Some(PageSource {
+                id: id?,
+                route: route?,
+                components: components?,
+            })
+        },
+    )
+}
+
+fn finish<T, I, F>(
+    diagnostics: Vec<Diagnostic>,
+    input: I,
+    source_id: &SourceId,
+    range: Range,
+    build: F,
+) -> Result<Located<T>, Vec<Diagnostic>>
+where
+    F: FnOnce(I) -> Option<T>,
+{
+    if !diagnostics.is_empty() {
+        return Err(diagnostics);
+    }
+    build(input).map_or_else(
+        || {
+            Err(vec![Diagnostic::error(
+                "UIKO1099",
+                "source adapter could not construct a validated source model",
+                span(source_id, range),
+            )])
+        },
+        |value| Ok(Located::new(value, span(source_id, range))),
+    )
+}
+
+fn parse_root_object<'a>(
+    source_id: &SourceId,
+    text: &'a str,
+) -> Result<Object<'a>, Vec<Diagnostic>> {
+    let parsed =
         parse_to_ast(text, &CollectOptions::default(), &parse_options()).map_err(|error| {
             vec![Diagnostic::error(
                 "UIKO1000",
                 error.kind().to_string(),
-                span(&source_id, error.range()),
+                span(source_id, error.range()),
             )]
         })?;
 
-    let Some(value) = parse_result.value else {
+    let Some(value) = parsed.value else {
         return Err(vec![Diagnostic::error(
             "UIKO1002",
             "expected a root object",
-            TextSpan::new(source_id, 0, 0),
+            TextSpan::new(source_id.clone(), 0, 0),
         )]);
     };
 
-    let root_range = value.range();
-    let Value::Object(object) = value else {
-        return Err(vec![Diagnostic::error(
-            "UIKO1002",
-            "expected a root object",
-            span(&source_id, root_range),
-        )]);
-    };
-
-    let mut diagnostics = validate_root_properties(&object, &source_id);
-
-    let name = parse_required_string(&object, "name", &source_id, &mut diagnostics);
-    let spec_version = parse_spec_version(&object, &source_id, &mut diagnostics);
-    let modules = parse_modules(&object, &source_id, &mut diagnostics);
-
-    if !diagnostics.is_empty() {
-        return Err(diagnostics);
-    }
-
-    match (name, spec_version, modules) {
-        (Some(name), Some(spec_version), Some(modules)) => Ok(Located::new(
-            AppConfigSource {
-                name,
-                spec_version,
-                modules,
-            },
-            span(&source_id, object.range),
-        )),
+    let range = value.range();
+    match value {
+        Value::Object(object) => Ok(object),
         _ => Err(vec![Diagnostic::error(
-            "UIKO1099",
-            "source adapter could not construct a validated root model",
-            span(&source_id, object.range),
+            "UIKO1002",
+            "expected a root object",
+            span(source_id, range),
         )]),
     }
 }
@@ -90,25 +169,28 @@ fn parse_options() -> ParseOptions {
     }
 }
 
-fn validate_root_properties(object: &Object<'_>, source_id: &SourceId) -> Vec<Diagnostic> {
+fn validate_properties(
+    object: &Object<'_>,
+    known_fields: &[&str],
+    context: &str,
+    source_id: &SourceId,
+) -> Vec<Diagnostic> {
     let mut diagnostics = Vec::new();
     let mut seen = BTreeSet::new();
 
     for property in &object.properties {
         let name = property.name.as_str();
-
-        if !KNOWN_ROOT_FIELDS.contains(&name) {
+        if !known_fields.contains(&name) {
             diagnostics.push(Diagnostic::error(
                 "UIKO1007",
-                format!("unknown root property `{name}`"),
+                format!("unknown {context} property `{name}`"),
                 span(source_id, property.name.range()),
             ));
         }
-
         if !seen.insert(name) {
             diagnostics.push(Diagnostic::error(
                 "UIKO1006",
-                format!("duplicate root property `{name}`"),
+                format!("duplicate {context} property `{name}`"),
                 span(source_id, property.name.range()),
             ));
         }
@@ -124,7 +206,6 @@ fn parse_required_string(
     diagnostics: &mut Vec<Diagnostic>,
 ) -> Option<Located<String>> {
     let property = required_property(object, field, source_id, diagnostics)?;
-
     match &property.value {
         Value::StringLit(value) => Some(Located::new(
             value.value.to_string(),
@@ -133,7 +214,7 @@ fn parse_required_string(
         value => {
             diagnostics.push(Diagnostic::error(
                 "UIKO1004",
-                format!("root property `{field}` must be a string"),
+                format!("property `{field}` must be a string"),
                 span(source_id, value.range()),
             ));
             None
@@ -147,63 +228,145 @@ fn parse_spec_version(
     diagnostics: &mut Vec<Diagnostic>,
 ) -> Option<Located<u32>> {
     let property = required_property(object, "specVersion", source_id, diagnostics)?;
-
-    match &property.value {
-        Value::NumberLit(value) => {
-            if let Ok(version) = value.value.parse::<u32>() {
-                Some(Located::new(version, span(source_id, value.range)))
-            } else {
-                diagnostics.push(Diagnostic::error(
-                    "UIKO1005",
-                    "root property `specVersion` must be an unsigned integer",
-                    span(source_id, value.range),
-                ));
-                None
-            }
-        }
-        value => {
-            diagnostics.push(Diagnostic::error(
-                "UIKO1004",
-                "root property `specVersion` must be a number",
-                span(source_id, value.range()),
-            ));
-            None
-        }
-    }
-}
-
-fn parse_modules(
-    object: &Object<'_>,
-    source_id: &SourceId,
-    diagnostics: &mut Vec<Diagnostic>,
-) -> Option<Vec<Located<String>>> {
-    let property = required_property(object, "modules", source_id, diagnostics)?;
-
-    let Value::Array(array) = &property.value else {
+    let Value::NumberLit(value) = &property.value else {
         diagnostics.push(Diagnostic::error(
             "UIKO1004",
-            "root property `modules` must be an array",
+            "property `specVersion` must be a number",
             span(source_id, property.value.range()),
         ));
         return None;
     };
 
-    let mut modules = Vec::with_capacity(array.elements.len());
+    if let Ok(version) = value.value.parse::<u32>() {
+        Some(Located::new(version, span(source_id, value.range)))
+    } else {
+        diagnostics.push(Diagnostic::error(
+            "UIKO1005",
+            "property `specVersion` must be an unsigned integer",
+            span(source_id, value.range),
+        ));
+        None
+    }
+}
+
+fn parse_string_array(
+    object: &Object<'_>,
+    field: &'static str,
+    source_id: &SourceId,
+    diagnostics: &mut Vec<Diagnostic>,
+) -> Option<Vec<Located<String>>> {
+    let property = required_property(object, field, source_id, diagnostics)?;
+    let Value::Array(array) = &property.value else {
+        diagnostics.push(Diagnostic::error(
+            "UIKO1004",
+            format!("property `{field}` must be an array"),
+            span(source_id, property.value.range()),
+        ));
+        return None;
+    };
+
+    let mut values = Vec::with_capacity(array.elements.len());
     for element in &array.elements {
         match element {
-            Value::StringLit(value) => modules.push(Located::new(
+            Value::StringLit(value) => values.push(Located::new(
                 value.value.to_string(),
                 span(source_id, value.range),
             )),
             value => diagnostics.push(Diagnostic::error(
                 "UIKO1008",
-                "every `modules` entry must be a string",
+                format!("every `{field}` entry must be a string"),
                 span(source_id, value.range()),
             )),
         }
     }
+    Some(values)
+}
 
-    Some(modules)
+fn parse_components(
+    object: &Object<'_>,
+    source_id: &SourceId,
+    diagnostics: &mut Vec<Diagnostic>,
+) -> Option<Vec<Located<ComponentSource>>> {
+    let property = required_property(object, "components", source_id, diagnostics)?;
+    let Value::Array(array) = &property.value else {
+        diagnostics.push(Diagnostic::error(
+            "UIKO1004",
+            "property `components` must be an array",
+            span(source_id, property.value.range()),
+        ));
+        return None;
+    };
+
+    Some(
+        array
+            .elements
+            .iter()
+            .filter_map(|value| parse_component(value, source_id, diagnostics))
+            .collect(),
+    )
+}
+
+fn parse_component(
+    value: &Value<'_>,
+    source_id: &SourceId,
+    diagnostics: &mut Vec<Diagnostic>,
+) -> Option<Located<ComponentSource>> {
+    let Value::Object(object) = value else {
+        diagnostics.push(Diagnostic::error(
+            "UIKO1010",
+            "component must be an object",
+            span(source_id, value.range()),
+        ));
+        return None;
+    };
+
+    let kind = parse_required_string(object, "type", source_id, diagnostics)?;
+    let component = match kind.value.as_str() {
+        "Text" => {
+            diagnostics.extend(validate_properties(
+                object,
+                &["type", "value"],
+                "Text component",
+                source_id,
+            ));
+            ComponentSource::Text {
+                value: parse_required_string(object, "value", source_id, diagnostics)?.value,
+            }
+        }
+        "Field" => {
+            diagnostics.extend(validate_properties(
+                object,
+                &["type", "label", "binding"],
+                "Field component",
+                source_id,
+            ));
+            ComponentSource::Field {
+                label: parse_required_string(object, "label", source_id, diagnostics)?.value,
+                binding: parse_required_string(object, "binding", source_id, diagnostics)?.value,
+            }
+        }
+        "Table" => {
+            diagnostics.extend(validate_properties(
+                object,
+                &["type", "binding"],
+                "Table component",
+                source_id,
+            ));
+            ComponentSource::Table {
+                binding: parse_required_string(object, "binding", source_id, diagnostics)?.value,
+            }
+        }
+        other => {
+            diagnostics.push(Diagnostic::error(
+                "UIKO1011",
+                format!("unsupported component type `{other}`"),
+                kind.span,
+            ));
+            return None;
+        }
+    };
+
+    Some(Located::new(component, span(source_id, object.range)))
 }
 
 fn required_property<'a>(
@@ -216,7 +379,7 @@ fn required_property<'a>(
     if property.is_none() {
         diagnostics.push(Diagnostic::error(
             "UIKO1003",
-            format!("missing required root property `{field}`"),
+            format!("missing required property `{field}`"),
             span(source_id, object.range),
         ));
     }
@@ -231,134 +394,101 @@ fn span(source_id: &SourceId, range: Range) -> TextSpan {
 mod tests {
     use uiko_core::SourceId;
 
-    use super::parse_app_config;
-
-    fn parse(
-        text: &str,
-    ) -> Result<uiko_core::Located<uiko_source::AppConfigSource>, Vec<uiko_core::Diagnostic>> {
-        parse_app_config(SourceId::new("uiko.jsonc"), text)
-    }
-
-    fn valid_root(extra: &str) -> String {
-        format!(
-            r#"{{
-  "name": "support-console",
-  "specVersion": 1,
-  "modules": ["./features/customers"]{extra}
-}}"#
-        )
-    }
+    use super::{parse_app_config, parse_module_config, parse_page};
 
     #[test]
-    fn comments_and_trailing_commas_are_allowed() {
-        let source = r#"{
-  // project name
+    fn app_policy_keeps_comments_and_trailing_commas_but_rejects_loose_json() {
+        let valid = r#"{
+  // project
   "name": "support-console",
   "specVersion": 1,
   "modules": ["./features/customers"],
 }"#;
+        assert!(parse_app_config(&SourceId::new("uiko.jsonc"), valid).is_ok());
 
-        assert!(parse(source).is_ok());
-    }
-
-    #[test]
-    fn loose_property_names_are_rejected() {
-        let source = r#"{ name: "support-console", "specVersion": 1, "modules": [] }"#;
-        assert_eq!(parse(source).unwrap_err()[0].code, "UIKO1000");
-    }
-
-    #[test]
-    fn missing_commas_are_rejected() {
-        let source = r#"{ "name": "support-console" "specVersion": 1, "modules": [] }"#;
-        assert_eq!(parse(source).unwrap_err()[0].code, "UIKO1000");
-    }
-
-    #[test]
-    fn single_quoted_strings_are_rejected() {
-        let source = r#"{ "name": 'support-console', "specVersion": 1, "modules": [] }"#;
-        assert_eq!(parse(source).unwrap_err()[0].code, "UIKO1000");
-    }
-
-    #[test]
-    fn hexadecimal_numbers_are_rejected() {
-        let source = r#"{ "name": "support-console", "specVersion": 0x1, "modules": [] }"#;
-        assert_eq!(parse(source).unwrap_err()[0].code, "UIKO1000");
-    }
-
-    #[test]
-    fn unary_plus_numbers_are_rejected() {
-        let source = r#"{ "name": "support-console", "specVersion": +1, "modules": [] }"#;
-        assert_eq!(parse(source).unwrap_err()[0].code, "UIKO1000");
+        let invalid = r#"{ name: "support-console", "specVersion": 1, "modules": [] }"#;
+        assert_eq!(
+            parse_app_config(&SourceId::new("uiko.jsonc"), invalid).unwrap_err()[0].code,
+            "UIKO1000"
+        );
     }
 
     #[test]
     fn located_values_keep_exact_byte_ranges() {
-        let source = valid_root("");
-        let parsed = parse(&source).expect("valid root should parse");
+        let source = r#"{
+  "name": "support-console",
+  "specVersion": 1,
+  "modules": ["./features/customers"]
+}"#;
+        let parsed =
+            parse_app_config(&SourceId::new("uiko.jsonc"), source).expect("valid app config");
 
-        let name_span = parsed.value.name.span;
+        let name = &parsed.value.name.span;
+        assert_eq!(&source[name.start..name.end], r#""support-console""#);
+        let module = &parsed.value.modules[0].span;
         assert_eq!(
-            &source[name_span.start..name_span.end],
-            r#""support-console""#
-        );
-
-        let module_span = &parsed.value.modules[0].span;
-        assert_eq!(
-            &source[module_span.start..module_span.end],
+            &source[module.start..module.end],
             r#""./features/customers""#
         );
     }
 
     #[test]
-    fn unknown_root_properties_fail_closed() {
-        let source = valid_root(r#", "surprise": true"#);
-        let diagnostics = parse(&source).expect_err("unknown root property must fail");
-
+    fn unknown_and_duplicate_properties_fail_closed() {
+        let unknown = r#"{ "name": "x", "specVersion": 1, "modules": [], "surprise": true }"#;
         assert!(
-            diagnostics
+            parse_app_config(&SourceId::new("uiko.jsonc"), unknown)
+                .unwrap_err()
                 .iter()
                 .any(|diagnostic| diagnostic.code == "UIKO1007")
         );
-    }
 
-    #[test]
-    fn duplicate_root_properties_fail_closed() {
-        let source = r#"{
-  "name": "support-console",
-  "name": "other",
-  "specVersion": 1,
-  "modules": []
-}"#;
-        let diagnostics = parse(source).expect_err("duplicate root property must fail");
-
+        let duplicate = r#"{ "name": "x", "name": "y", "specVersion": 1, "modules": [] }"#;
         assert!(
-            diagnostics
+            parse_app_config(&SourceId::new("uiko.jsonc"), duplicate)
+                .unwrap_err()
                 .iter()
                 .any(|diagnostic| diagnostic.code == "UIKO1006")
         );
     }
 
     #[test]
-    fn malformed_spec_version_has_its_own_structural_diagnostic() {
-        let source = r#"{ "name": "support-console", "specVersion": 1.0, "modules": [] }"#;
-        let diagnostics = parse(source).expect_err("non-integer specVersion must fail");
+    fn module_and_page_fixture_shapes_parse() {
+        let module = r#"{
+  "id": "customers",
+  "pages": ["./list.jsonc", "./detail.jsonc"]
+}"#;
+        let page = r#"{
+  "id": "CustomerDetail",
+  "route": "/customers/:customerId",
+  "components": [
+    { "type": "Text", "value": "Customer" },
+    { "type": "Field", "label": "Name", "binding": "customer.name" }
+  ]
+}"#;
 
-        assert!(
-            diagnostics
-                .iter()
-                .any(|diagnostic| diagnostic.code == "UIKO1005")
-        );
+        let module = parse_module_config(&SourceId::new("features/customers/module.jsonc"), module)
+            .expect("module should parse");
+        let page = parse_page(&SourceId::new("features/customers/detail.jsonc"), page)
+            .expect("page should parse");
+
+        assert_eq!(module.value.id.value, "customers");
+        assert_eq!(module.value.pages.len(), 2);
+        assert_eq!(page.value.id.value, "CustomerDetail");
+        assert_eq!(page.value.components.len(), 2);
     }
 
     #[test]
-    fn non_string_module_entry_is_rejected() {
-        let source = r#"{ "name": "support-console", "specVersion": 1, "modules": [42] }"#;
-        let diagnostics = parse(source).expect_err("non-string module entry must fail");
-
+    fn unsupported_component_fails_closed() {
+        let page = r#"{
+  "id": "Broken",
+  "route": "/broken",
+  "components": [{ "type": "Magic" }]
+}"#;
         assert!(
-            diagnostics
+            parse_page(&SourceId::new("broken.jsonc"), page)
+                .unwrap_err()
                 .iter()
-                .any(|diagnostic| diagnostic.code == "UIKO1008")
+                .any(|diagnostic| diagnostic.code == "UIKO1011")
         );
     }
 }

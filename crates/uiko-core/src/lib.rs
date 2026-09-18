@@ -111,6 +111,13 @@ pub struct AppIr {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ModuleIr {
     pub id: ModuleId,
+    pub pages: Vec<PageIr>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PageIr {
+    pub id: String,
+    pub route: String,
     pub components: Vec<ComponentIr>,
 }
 
