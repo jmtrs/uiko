@@ -768,6 +768,18 @@ impl<'a> AggregationState<'a> {
         measurements: FinalMeasurements,
     ) -> Result<RunResult, String> {
         self.reconcile_last_edits()?;
+        if identity.end.outcome == Outcome::Accepted
+            && (self.acceptance.is_empty()
+                || self.acceptance.values().any(|criterion| !criterion.passed))
+        {
+            self.deviations.push(ProtocolDeviationResult {
+                code: "G0_TRACE_ACCEPTANCE_MISMATCH".into(),
+                description:
+                    "run_end declared accepted without a complete set of passing recorded criteria"
+                        .into(),
+                impact: DeviationImpact::Invalidating,
+            });
+        }
 
         let mut outcome = identity.end.outcome;
         if self
