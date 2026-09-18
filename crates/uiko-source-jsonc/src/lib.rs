@@ -3,9 +3,10 @@
 use std::collections::BTreeSet;
 
 use jsonc_parser::{
+    ParseOptions,
     ast::{Object, ObjectProp, Value},
     common::{Range, Ranged},
-    parse_to_ast, ParseOptions,
+    parse_to_ast,
 };
 use uiko_core::{Diagnostic, Located, SourceId, TextSpan};
 use uiko_source::AppConfigSource;
@@ -24,13 +25,14 @@ pub fn parse_app_config(
     source_id: SourceId,
     text: &str,
 ) -> Result<Located<AppConfigSource>, Vec<Diagnostic>> {
-    let parse_result = parse_to_ast(text, &Default::default(), &parse_options()).map_err(|error| {
-        vec![Diagnostic::error(
-            "UIKO1000",
-            error.kind().to_string(),
-            span(&source_id, error.range()),
-        )]
-    })?;
+    let parse_result =
+        parse_to_ast(text, &Default::default(), &parse_options()).map_err(|error| {
+            vec![Diagnostic::error(
+                "UIKO1000",
+                error.kind().to_string(),
+                span(&source_id, error.range()),
+            )]
+        })?;
 
     let Some(value) = parse_result.value else {
         return Err(vec![Diagnostic::error(
@@ -225,7 +227,9 @@ mod tests {
 
     use super::parse_app_config;
 
-    fn parse(text: &str) -> Result<uiko_core::Located<uiko_source::AppConfigSource>, Vec<uiko_core::Diagnostic>> {
+    fn parse(
+        text: &str,
+    ) -> Result<uiko_core::Located<uiko_source::AppConfigSource>, Vec<uiko_core::Diagnostic>> {
         parse_app_config(SourceId::new("uiko.jsonc"), text)
     }
 
@@ -287,7 +291,10 @@ mod tests {
         let parsed = parse(&source).expect("valid root should parse");
 
         let name_span = parsed.value.name.span;
-        assert_eq!(&source[name_span.start..name_span.end], r#""support-console""#);
+        assert_eq!(
+            &source[name_span.start..name_span.end],
+            r#""support-console""#
+        );
 
         let module_span = &parsed.value.modules[0].span;
         assert_eq!(
@@ -301,7 +308,11 @@ mod tests {
         let source = valid_root(r#", "surprise": true"#);
         let diagnostics = parse(&source).expect_err("unknown root property must fail");
 
-        assert!(diagnostics.iter().any(|diagnostic| diagnostic.code == "UIKO1007"));
+        assert!(
+            diagnostics
+                .iter()
+                .any(|diagnostic| diagnostic.code == "UIKO1007")
+        );
     }
 
     #[test]
@@ -314,7 +325,11 @@ mod tests {
 }"#;
         let diagnostics = parse(source).expect_err("duplicate root property must fail");
 
-        assert!(diagnostics.iter().any(|diagnostic| diagnostic.code == "UIKO1006"));
+        assert!(
+            diagnostics
+                .iter()
+                .any(|diagnostic| diagnostic.code == "UIKO1006")
+        );
     }
 
     #[test]
@@ -322,7 +337,11 @@ mod tests {
         let source = r#"{ "name": "support-console", "specVersion": 1.0, "modules": [] }"#;
         let diagnostics = parse(source).expect_err("non-integer specVersion must fail");
 
-        assert!(diagnostics.iter().any(|diagnostic| diagnostic.code == "UIKO1005"));
+        assert!(
+            diagnostics
+                .iter()
+                .any(|diagnostic| diagnostic.code == "UIKO1005")
+        );
     }
 
     #[test]
@@ -330,6 +349,10 @@ mod tests {
         let source = r#"{ "name": "support-console", "specVersion": 1, "modules": [42] }"#;
         let diagnostics = parse(source).expect_err("non-string module entry must fail");
 
-        assert!(diagnostics.iter().any(|diagnostic| diagnostic.code == "UIKO1008"));
+        assert!(
+            diagnostics
+                .iter()
+                .any(|diagnostic| diagnostic.code == "UIKO1008")
+        );
     }
 }

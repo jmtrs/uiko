@@ -82,7 +82,7 @@ mod tests {
     use uiko_core::{Located, ModuleId, SourceId, TextSpan};
     use uiko_source::{AppSource, ComponentSource, ModuleSource};
 
-    use super::{compile, SUPPORTED_SPEC_VERSION};
+    use super::{SUPPORTED_SPEC_VERSION, compile};
 
     fn located(app: AppSource) -> Located<AppSource> {
         Located::new(app, TextSpan::new(SourceId::new("uiko.jsonc"), 0, 10))

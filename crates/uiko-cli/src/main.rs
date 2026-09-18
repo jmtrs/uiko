@@ -15,7 +15,9 @@ fn main() -> ExitCode {
             ExitCode::SUCCESS
         }
         Some(command) => {
-            eprintln!("UIKO0001: command `{command}` is not implemented in the bootstrap milestone");
+            eprintln!(
+                "UIKO0001: command `{command}` is not implemented in the bootstrap milestone"
+            );
             ExitCode::from(2)
         }
     }
