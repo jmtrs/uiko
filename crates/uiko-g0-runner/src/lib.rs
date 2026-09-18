@@ -61,7 +61,7 @@ pub struct TraceEvent {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(tag = "kind", rename_all = "snake_case")]
+#[serde(tag = "kind", rename_all = "snake_case", rename_all_fields = "camelCase")]
 pub enum EventPayload {
     RunStart {
         base_revision: String,
@@ -1226,6 +1226,53 @@ mod tests {
 
         assert_eq!(first + revert, 1);
         assert_eq!(final_change, 0);
+    }
+
+    #[test]
+    fn trace_event_payload_fields_follow_frozen_camel_case_schema() {
+        let json = r#"{
+          "schemaVersion": 1,
+          "sequence": 1,
+          "runId": "G0-D01-B_FULL-r1",
+          "taskId": "G0-D01",
+          "arm": "B_FULL",
+          "kind": "run_start",
+          "baseRevision": "0123456789abcdef",
+          "startedAt": "2026-09-18T00:00:00Z",
+          "startedUnixMs": 1000,
+          "model": {
+            "provider": "test",
+            "model": "test",
+            "modelVersion": "test",
+            "agentHarness": "test",
+            "parameters": {},
+            "seed": null
+          },
+          "environment": {
+            "os": "test",
+            "arch": "test",
+            "node": null,
+            "rustc": null,
+            "browser": null
+          }
+        }"#;
+
+        let event: TraceEvent = serde_json::from_str(json).expect("frozen trace schema JSON");
+        let EventPayload::RunStart {
+            base_revision,
+            started_unix_ms,
+            ..
+        } = event.payload
+        else {
+            panic!("expected run_start");
+        };
+
+        assert_eq!(base_revision, "0123456789abcdef");
+        assert_eq!(started_unix_ms, 1000);
+        let serialized = serde_json::to_value(event).expect("serialize trace event");
+        assert_eq!(serialized["baseRevision"], "0123456789abcdef");
+        assert_eq!(serialized["startedUnixMs"], 1000);
+        assert!(serialized.get("base_revision").is_none());
     }
 
     #[test]
