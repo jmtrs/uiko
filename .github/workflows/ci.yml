@@ -24,6 +24,34 @@ jobs:
         run: cargo clippy --workspace --all-targets --all-features -- -D warnings
       - name: Test
         run: cargo test --workspace --locked
+      - name: Fixture emits deterministic UiManifest
+        run: |
+          cargo run --quiet -p uiko-cli -- build fixtures/support-console \
+            --ui-manifest /tmp/app.uiko-manifest.json
+          jq -e '
+            .specVersion == 1
+            and .app == "support-console"
+            and (.routes | length) == 2
+            and ([.routes[].id] | index("customers.CustomerList") != null)
+            and ([.routes[].id] | index("customers.CustomerDetail") != null)
+          ' /tmp/app.uiko-manifest.json > /dev/null
+
+  vue-host:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: hosts/vue
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.21.0
+      - name: Install exact direct dependencies
+        run: npm install --ignore-scripts --no-audit --no-fund
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Build
+        run: npm run build
 
   repository-invariants:
     runs-on: ubuntu-latest
@@ -44,7 +72,9 @@ jobs:
             experiments/fixtures/g0-support-api.openapi.json \
             experiments/g0/path-policy.json \
             experiments/g0/run-result.schema.json \
-            experiments/g0/run-template.json
+            experiments/g0/run-template.json \
+            hosts/vue/package.json \
+            hosts/vue/tsconfig.json
       - name: G0 task set and probes are frozen
         run: |
           jq -e '
@@ -61,9 +91,17 @@ jobs:
           jq -e '
             ([.dependencies[], .devDependencies[]] | all(test("^[0-9]+\\.[0-9]+\\.[0-9]+$")))
           ' baselines/b-full/package.json > /dev/null
+      - name: Vue host uses exact direct versions
+        run: |
+          jq -e '
+            ([.dependencies[], .devDependencies[]] | all(test("^[0-9]+\\.[0-9]+\\.[0-9]+$")))
+          ' hosts/vue/package.json > /dev/null
       - name: G0 contract and metric policy are frozen
         run: |
           jq -e '.openapi == "3.1.0" and .info.version == "1.0.0"' \
             experiments/fixtures/g0-support-api.openapi.json > /dev/null
-          jq -e '.status == "frozen-g0-v1" and .tokenization.id == "unicode-lexical-v1"' \
-            experiments/g0/path-policy.json > /dev/null
+          jq -e '
+            .status == "frozen-g0-v1"
+            and .tokenization.id == "unicode-lexical-v1"
+            and (.arms.C_UIKO.coreOwned | index("hosts/**") != null)
+          ' experiments/g0/path-policy.json > /dev/null
