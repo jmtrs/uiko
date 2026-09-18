@@ -84,11 +84,7 @@ pub fn compile(
     for module in &source.value.modules {
         let mut pages = Vec::with_capacity(module.value.pages.len());
         for page in &module.value.pages {
-            match lower_page(
-                module.value.id.value.as_str(),
-                &page.value,
-                capabilities,
-            ) {
+            match lower_page(module.value.id.value.as_str(), &page.value, capabilities) {
                 Ok(lowered) => pages.push(lowered),
                 Err(errors) => diagnostics.extend(errors),
             }
@@ -165,8 +161,7 @@ fn lower_page(
             continue;
         };
 
-        let query_diagnostics =
-            validate_query_input(&query.value, operation, &route_parameters);
+        let query_diagnostics = validate_query_input(&query.value, operation, &route_parameters);
         if !query_diagnostics.is_empty() {
             diagnostics.extend(query_diagnostics);
             continue;
@@ -174,8 +169,7 @@ fn lower_page(
 
         let logical_id = format!(
             "{module_id}.{}.query.{}",
-            page.id.value,
-            query.value.id.value
+            page.id.value, query.value.id.value
         );
         queries.push(QueryIr {
             id: logical_id,
@@ -196,18 +190,14 @@ fn lower_page(
 
     for component in &page.components {
         let binding = match &component.value.kind {
-            ComponentKindSource::Field { binding, .. }
-            | ComponentKindSource::Table { binding } => Some(binding.as_str()),
+            ComponentKindSource::Field { binding, .. } | ComponentKindSource::Table { binding } => {
+                Some(binding.as_str())
+            }
             ComponentKindSource::Text { .. } => None,
         };
 
         if let Some(binding) = binding {
-            validate_component_binding(
-                binding,
-                &query_aliases,
-                &component.span,
-                &mut diagnostics,
-            );
+            validate_component_binding(binding, &query_aliases, &component.span, &mut diagnostics);
         }
     }
 
@@ -262,9 +252,7 @@ fn validate_query_input(
         let Some(route_parameter) = expression.strip_prefix("route.") else {
             diagnostics.push(Diagnostic::error(
                 "UIKO2106",
-                format!(
-                    "M4 input binding `{expression}` is unsupported; expected route.<param>"
-                ),
+                format!("M4 input binding `{expression}` is unsupported; expected route.<param>"),
                 binding.value.expression.span.clone(),
             ));
             continue;
@@ -322,9 +310,7 @@ fn validate_component_binding(
     if !operation.output.supports_path(path.iter().copied()) {
         diagnostics.push(Diagnostic::error(
             "UIKO2111",
-            format!(
-                "binding `{binding}` does not exist in output of query `{alias}`"
-            ),
+            format!("binding `{binding}` does not exist in output of query `{alias}`"),
             span.clone(),
         ));
     }
@@ -428,13 +414,13 @@ mod tests {
                 spec_version: SUPPORTED_SPEC_VERSION,
                 modules: vec![at(
                     ModuleSource {
-                        id: at(ModuleId::new("customers"), "features/customers/module.jsonc"),
+                        id: at(
+                            ModuleId::new("customers"),
+                            "features/customers/module.jsonc",
+                        ),
                         pages: vec![at(
                             PageSource {
-                                id: at(
-                                    "CustomerDetail".into(),
-                                    "features/customers/detail.jsonc",
-                                ),
+                                id: at("CustomerDetail".into(), "features/customers/detail.jsonc"),
                                 route: at(
                                     "/customers/:customerId".into(),
                                     "features/customers/detail.jsonc",
@@ -467,10 +453,7 @@ mod tests {
                                 )],
                                 components: vec![at(
                                     ComponentSource {
-                                        id: at(
-                                            "name".into(),
-                                            "features/customers/detail.jsonc",
-                                        ),
+                                        id: at("name".into(), "features/customers/detail.jsonc"),
                                         kind: ComponentKindSource::Field {
                                             label: "Name".into(),
                                             binding: "customer.name".into(),
@@ -516,7 +499,9 @@ mod tests {
     #[test]
     fn missing_route_parameter_binding_fails() {
         let mut source = app();
-        source.value.modules[0].value.pages[0].value.queries[0].value.input[0]
+        source.value.modules[0].value.pages[0].value.queries[0]
+            .value
+            .input[0]
             .value
             .expression
             .value = "route.id".into();
