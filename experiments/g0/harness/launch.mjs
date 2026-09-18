@@ -1,7 +1,7 @@
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 
-import { runChecked, spawnManaged, stopManaged, waitForHttp } from "./processes.mjs";
+import { runChecked, spawnManaged, stopManaged, waitForHttp, waitForTcp } from "./processes.mjs";
 
 const FIXTURE_PORT = 4317;
 const B_FULL_PORT = 4318;
@@ -72,6 +72,7 @@ export async function launchArm(repoRoot, arm) {
         { cwd: repoRoot },
       );
       children.push(gateway);
+      await waitForTcp(GATEWAY_PORT);
 
       const host = spawnManaged(
         "npm",
