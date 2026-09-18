@@ -1,4 +1,4 @@
-import type { UikoApp } from "../../../controls/t-authoring/generated/uiko-authoring.js";
+import type { UikoApp } from "./generated/uiko-authoring.js";
 
 const app = {
   name: "support-console",
