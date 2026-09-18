@@ -233,6 +233,6 @@ mod tests {
         let second = derive_ui_manifest(&ir).to_json_pretty();
 
         assert_eq!(first, second);
-        assert!(first.contains(r#"\"value\":\"Customer \\\"A\\\"\""#));
+        assert!(first.contains(r#""value":"Customer \"A\"""#));
     }
 }
