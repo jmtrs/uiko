@@ -18,7 +18,8 @@ async fn main() {
 }
 
 async fn run() -> Result<(), String> {
-    let config = parse_args(std::env::args().skip(1).collect())?;
+    let args: Vec<_> = std::env::args().skip(1).collect();
+    let config = parse_args(&args)?;
     let loaded = load_project(&config.project).map_err(|diagnostics| {
         diagnostics
             .iter()
@@ -54,7 +55,7 @@ struct Config {
     integrations: BTreeMap<String, Url>,
 }
 
-fn parse_args(args: Vec<String>) -> Result<Config, String> {
+fn parse_args(args: &[String]) -> Result<Config, String> {
     let mut project = None;
     let mut listen = "127.0.0.1:3001"
         .parse::<SocketAddr>()
