@@ -127,9 +127,7 @@ fn lower_component(component: &ComponentSource) -> ComponentIr {
 #[cfg(test)]
 mod tests {
     use uiko_core::{Located, ModuleId, SourceId, TextSpan};
-    use uiko_source::{
-        AppSource, ComponentKindSource, ComponentSource, ModuleSource, PageSource,
-    };
+    use uiko_source::{AppSource, ComponentKindSource, ComponentSource, ModuleSource, PageSource};
 
     use super::{SUPPORTED_SPEC_VERSION, compile};
 
@@ -151,10 +149,7 @@ mod tests {
                                 route: at("/customers".into(), "features/customers/list.jsonc"),
                                 components: vec![at(
                                     ComponentSource {
-                                        id: at(
-                                            "title".into(),
-                                            "features/customers/list.jsonc",
-                                        ),
+                                        id: at("title".into(), "features/customers/list.jsonc"),
                                         kind: ComponentKindSource::Text {
                                             value: "Customers".into(),
                                         },
