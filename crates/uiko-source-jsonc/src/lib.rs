@@ -318,11 +318,9 @@ fn parse_optional_string_array(
     source_id: &SourceId,
     diagnostics: &mut Vec<Diagnostic>,
 ) -> Option<Vec<Located<String>>> {
-    object
-        .get(field)
-        .map_or(Some(Vec::new()), |property| {
-            string_array_value(property, field, source_id, diagnostics)
-        })
+    object.get(field).map_or(Some(Vec::new()), |property| {
+        string_array_value(property, field, source_id, diagnostics)
+    })
 }
 
 fn string_array_value(
@@ -404,8 +402,7 @@ fn parse_queries(
             source_id,
         ));
 
-        let operation =
-            parse_required_string(query_object, "operation", source_id, diagnostics);
+        let operation = parse_required_string(query_object, "operation", source_id, diagnostics);
         let input = parse_query_input(query_object, source_id, diagnostics);
 
         if let (Some(operation), Some(input)) = (operation, input) {
