@@ -378,10 +378,15 @@ async function measuredSourceText(repoRoot, arm) {
   const roots =
     arm === "B_FULL"
       ? [join(repoRoot, "baselines/b-full/src")]
-      : [
-          join(repoRoot, "fixtures/support-console/uiko.jsonc"),
-          join(repoRoot, "fixtures/support-console/features"),
-        ];
+      : arm === "R_RENDER_ONLY"
+        ? [
+            join(repoRoot, "experiments/controls/r-render-only/src"),
+            join(repoRoot, "experiments/controls/r-render-only/ui"),
+          ]
+        : [
+            join(repoRoot, "fixtures/support-console/uiko.jsonc"),
+            join(repoRoot, "fixtures/support-console/features"),
+          ];
   const files = [];
   for (const root of roots) {
     try {

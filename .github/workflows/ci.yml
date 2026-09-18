@@ -133,6 +133,43 @@ jobs:
           second_d05="$(bash ../../experiments/g0/materialize-prerequisite-base.sh B_FULL G0-D05 ../..)"
           test "$first_d05" = "$second_d05"
 
+  r-render-only:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: experiments/controls/r-render-only
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.21.0
+      - name: Use frozen npm
+        run: |
+          npm install --global npm@11.19.0
+          test "$(npm --version)" = "11.19.0"
+      - name: Install exact direct dependencies
+        run: npm install --ignore-scripts --no-audit --no-fund
+      - name: Generate frozen OpenAPI types
+        run: npm run generate:api
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Lint
+        run: npm run lint
+      - name: Build
+        run: npm run build
+      - name: D05 prerequisite is deterministic and executable
+        run: |
+          base="$(git rev-parse HEAD)"
+          rm -f package-lock.json src/api/generated/schema.d.ts
+          first="$(bash ../../g0/materialize-prerequisite-base.sh R_RENDER_ONLY G0-D05 ../../..)"
+          npm run generate:api
+          npm run typecheck
+          npm run lint
+          git reset --hard --quiet "$base"
+          rm -f package-lock.json src/api/generated/schema.d.ts
+          second="$(bash ../../g0/materialize-prerequisite-base.sh R_RENDER_ONLY G0-D05 ../../..)"
+          test "$first" = "$second"
+
   g0-harness:
     runs-on: ubuntu-latest
     defaults:
@@ -174,6 +211,8 @@ jobs:
           jq empty \
             baselines/b-full/package.json \
             baselines/b-full/stack-lock.json \
+            experiments/controls/r-render-only/package.json \
+            experiments/controls/r-render-only/stack-lock.json \
             experiments/tasks/dev-manifest.json \
             experiments/fixtures/g0-support-api.openapi.json \
             experiments/g0/path-policy.json \
@@ -205,6 +244,7 @@ jobs:
             and .taskBases.T_AUTHORING["G0-D05"] == "D03"
             and (.templates.B_FULL | keys == ["D01","D02","D03"])
             and (.templates.C_UIKO | keys == ["D01","D02","D03"])
+            and .templates.R_RENDER_ONLY.D03 == "experiments/g0/prerequisites/R_RENDER_ONLY/D03"
           ' experiments/g0/prerequisite-bases.json > /dev/null
       - name: G0 task set and probes are frozen
         run: |
@@ -215,6 +255,17 @@ jobs:
             and ([.tasks[] | select(.probes | index("R_RENDER_ONLY"))] | length) >= 3
             and ([.tasks[] | select(.probes | index("T_AUTHORING"))] | length) >= 3
           ' experiments/tasks/dev-manifest.json > /dev/null
+      - name: Renderer-only control uses exact frozen versions
+        run: |
+          jq -e '
+            .status == "frozen-g0-v1"
+            and .arm == "R_RENDER_ONLY"
+            and .dependencies["@json-render/core"] == "0.20.0"
+            and .dependencies["@json-render/react"] == "0.20.0"
+          ' experiments/controls/r-render-only/stack-lock.json > /dev/null
+          jq -e '
+            ([.dependencies[], .devDependencies[]] | all(test("^[0-9]+\\.[0-9]+\\.[0-9]+$")))
+          ' experiments/controls/r-render-only/package.json > /dev/null
       - name: B-full stack uses exact frozen versions
         run: |
           jq -e '.status == "frozen-g0-v1" and .freezeRules.exactVersionsOnly == true' \
@@ -226,6 +277,7 @@ jobs:
         run: |
           ! grep -R -n -E 'listCustomers|getCustomer|listCustomerOrders|/customers' \
             baselines/b-full/src \
+            experiments/controls/r-render-only/src \
             fixtures/support-console/uiko.jsonc
           test ! -d fixtures/support-console/features || \
             ! find fixtures/support-console/features -type f | grep -q .

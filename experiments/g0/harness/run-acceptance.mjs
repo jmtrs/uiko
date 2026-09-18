@@ -163,11 +163,17 @@ async function main() {
 
   if (values.arm === undefined || values.task === undefined) {
     throw new Error(
-      "usage: node run-acceptance.mjs --arm B_FULL|C_UIKO --task G0-D01 [--trace TRACE]",
+      "usage: node run-acceptance.mjs --arm B_FULL|C_UIKO|R_RENDER_ONLY --task G0-D01 [--trace TRACE]",
     );
   }
-  if (!["B_FULL", "C_UIKO"].includes(values.arm)) {
-    throw new Error(`unsupported primary arm ${values.arm}`);
+  if (!["B_FULL", "C_UIKO", "R_RENDER_ONLY"].includes(values.arm)) {
+    throw new Error(`unsupported G0 arm ${values.arm}`);
+  }
+  if (
+    values.arm === "R_RENDER_ONLY" &&
+    !["G0-D01", "G0-D02", "G0-D05"].includes(values.task)
+  ) {
+    throw new Error(`task ${values.task} is not registered for R_RENDER_ONLY`);
   }
   if (!(values.task in EXPECTED_CRITERIA)) {
     throw new Error(`invalid task id ${values.task}`);
