@@ -13,7 +13,7 @@ The frozen stack is:
 - Node.js 24.21.0 LTS + npm 11.19.0
 - Vite 7.3.6 + @vitejs/plugin-react 5.2.0
 - React / React DOM 19.2.8
-- TypeScript 6.0.3 in strict mode
+- TypeScript 5.9.3 in strict mode
 - React Router DOM 7.18.4
 - TanStack Query 5.103.1
 - Zod 4.5.4
@@ -21,6 +21,8 @@ The frozen stack is:
 - Material UI 7.3.11 + Emotion
 - ESLint 10.10.0 + typescript-eslint 8.70.0
 - Playwright Test 1.63.0
+
+Before the first measured run, TypeScript was corrected from 6.0.3 to 5.9.3 because the frozen `openapi-typescript` 7.13.0 package declares a TypeScript `^5.x` peer dependency. No measured run used the incompatible combination.
 
 ## Frozen executable base
 
