@@ -479,7 +479,7 @@ mod tests {
     use uiko_core::{Located, ModuleId, SourceId, TextSpan};
     use uiko_source::{
         AppSource, ComponentKindSource, ComponentSource, InputBindingSource, ModuleSource,
-        PageSource, QuerySource,
+        PageSource, PageStateSource, QuerySource, StateValueSource,
     };
 
     use super::{SUPPORTED_SPEC_VERSION, compile};
@@ -632,6 +632,50 @@ mod tests {
             diagnostics
                 .iter()
                 .any(|diagnostic| diagnostic.code == "UIKO2107")
+        );
+    }
+
+    #[test]
+    fn unknown_page_state_binding_fails_before_browser_execution() {
+        let mut source = app();
+        source.value.modules[0].value.pages[0].value.queries[0]
+            .value
+            .input[0]
+            .value
+            .expression
+            .value = "state.customerId".into();
+
+        let diagnostics = compile(&source, &catalog()).unwrap_err();
+        assert!(
+            diagnostics
+                .iter()
+                .any(|diagnostic| diagnostic.code == "UIKO2114")
+        );
+    }
+
+    #[test]
+    fn pagination_requires_integer_page_state() {
+        let mut source = app();
+        let page = &mut source.value.modules[0].value.pages[0].value;
+        page.state.push(at(
+            PageStateSource {
+                id: at("page".into(), "features/customers/detail.jsonc"),
+                initial: StateValueSource::String("1".into()),
+            },
+            "features/customers/detail.jsonc",
+        ));
+        page.components[0].value.kind = ComponentKindSource::Pagination {
+            state: "page".into(),
+            page_binding: "customer.name".into(),
+            page_size_binding: "customer.name".into(),
+            total_binding: "customer.name".into(),
+        };
+
+        let diagnostics = compile(&source, &catalog()).unwrap_err();
+        assert!(
+            diagnostics
+                .iter()
+                .any(|diagnostic| diagnostic.code == "UIKO2113")
         );
     }
 
