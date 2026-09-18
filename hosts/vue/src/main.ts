@@ -7,6 +7,7 @@ import {
   uiManifestSchema,
   type UiManifest,
   type UiQuery,
+  type UiStateValue,
 } from "./manifest";
 import { matchRoute, type RouteMatch } from "./router";
 
@@ -32,21 +33,36 @@ async function loadManifest(): Promise<UiManifest> {
 async function invokeQuery(
   query: UiQuery,
   params: Readonly<Record<string, string>>,
+  state: Readonly<Record<string, UiStateValue>>,
 ): Promise<unknown> {
-  const input: Record<string, string> = {};
+  const input: Record<string, unknown> = {};
 
   for (const binding of query.input) {
-    const routeParam = binding.expression.replace(/^route\./, "");
-    if (routeParam === binding.expression || !(routeParam in params)) {
-      throw new Error(
-        `Unsupported or unresolved compiled input ${binding.expression}`,
-      );
+    if (binding.expression.startsWith("route.")) {
+      const routeParam = binding.expression.slice("route.".length);
+      const value = params[routeParam];
+      if (value === undefined) {
+        throw new Error(`Missing route parameter ${routeParam}`);
+      }
+      input[binding.name] = value;
+      continue;
     }
-    const value = params[routeParam];
-    if (value === undefined) {
-      throw new Error(`Missing route parameter ${routeParam}`);
+
+    if (binding.expression.startsWith("state.")) {
+      const stateId = binding.expression.slice("state.".length);
+      if (!(stateId in state)) {
+        throw new Error(`Missing page state ${stateId}`);
+      }
+      const value = state[stateId];
+      if (value !== null && value !== undefined) {
+        input[binding.name] = value;
+      }
+      continue;
     }
-    input[binding.name] = value;
+
+    throw new Error(
+      `Unsupported compiled input ${binding.expression}; expected route.* or state.*`,
+    );
   }
 
   const response = await fetch(QUERY_URL, {
@@ -75,6 +91,9 @@ async function bootstrap(): Promise<void> {
   const current = ref<RouteMatch | null>(
     matchRoute(manifest.routes, window.location.pathname),
   );
+  const pageState = ref<Record<string, UiStateValue>>(
+    initialState(current.value),
+  );
   const queryData = ref<Record<string, unknown>>({});
   const loading = ref(current.value !== null);
   const queryError = ref<string | null>(null);
@@ -91,12 +110,16 @@ async function bootstrap(): Promise<void> {
     }
 
     loading.value = true;
+    const stateSnapshot = { ...pageState.value };
     try {
       const entries = await Promise.all(
-        match.route.queries.map(async (query) => [
-          query.alias,
-          await invokeQuery(query, match.params),
-        ] as const),
+        match.route.queries.map(
+          async (query) =>
+            [
+              query.alias,
+              await invokeQuery(query, match.params, stateSnapshot),
+            ] as const,
+        ),
       );
       if (requestGeneration === generation) {
         queryData.value = Object.fromEntries(entries);
@@ -114,6 +137,19 @@ async function bootstrap(): Promise<void> {
 
   window.addEventListener("popstate", () => {
     current.value = matchRoute(manifest.routes, window.location.pathname);
+    pageState.value = initialState(current.value);
+    void refresh(current.value);
+  });
+
+  window.addEventListener("uiko-state-change", (event) => {
+    const change = stateChange(event);
+    if (change === null || !(change.state in pageState.value)) {
+      return;
+    }
+    pageState.value = {
+      ...pageState.value,
+      [change.state]: change.value,
+    };
     void refresh(current.value);
   });
 
@@ -152,7 +188,11 @@ async function bootstrap(): Promise<void> {
           [
             status,
             h(Renderer, {
-              spec: toJsonRenderSpec(match.route, queryData.value),
+              spec: toJsonRenderSpec(
+                match.route,
+                queryData.value,
+                pageState.value,
+              ),
               registry,
             }),
           ],
@@ -163,6 +203,46 @@ async function bootstrap(): Promise<void> {
 
   createApp(App).mount("#app");
   void refresh(current.value);
+}
+
+function initialState(match: RouteMatch | null): Record<string, UiStateValue> {
+  if (match === null) {
+    return {};
+  }
+  return Object.fromEntries(
+    match.route.state.map((state) => [state.id, state.initial]),
+  );
+}
+
+function stateChange(
+  event: Event,
+): { state: string; value: UiStateValue } | null {
+  if (!(event instanceof CustomEvent)) {
+    return null;
+  }
+  const detail: unknown = event.detail;
+  if (
+    typeof detail !== "object" ||
+    detail === null ||
+    !("state" in detail) ||
+    !("value" in detail)
+  ) {
+    return null;
+  }
+
+  const state = (detail as Record<string, unknown>).state;
+  const value = (detail as Record<string, unknown>).value;
+  if (
+    typeof state !== "string" ||
+    !(
+      value === null ||
+      typeof value === "string" ||
+      (typeof value === "number" && Number.isInteger(value))
+    )
+  ) {
+    return null;
+  }
+  return { state, value };
 }
 
 void bootstrap().catch((error: unknown) => {
