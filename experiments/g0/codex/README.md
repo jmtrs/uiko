@@ -65,4 +65,4 @@ The freezer:
 - records SHA-256 for every frozen setup snapshot;
 - writes `experiments/g0/experiment-lock.json`.
 
-Commit the generated lock before the first measured run. Its `harnessRevision` intentionally points to the preceding code revision, so the lock commit itself cannot change the measured harness.
+Commit the generated `experiment-lock.json` and `frozen-setup/` snapshots together in one dedicated commit before the first measured run. Do not include any other change in that commit. Its `harnessRevision` intentionally points to the parent code revision, and the runner rejects dirty, later, or mixed lock checkouts.
