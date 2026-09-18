@@ -1,14 +1,30 @@
 # uiko
 
-uiko is an experimental compiler-first UI system for coding agents.
+**A compiler-first UI system built for coding agents, not adapted to them.**
 
-Its PoC thesis is intentionally narrow: reduce application behavior an agent must invent, compile the remaining behavior into a deterministic application plan, and test whether that produces smaller repair loops and a better review surface before investing in a managed runtime.
+Agents author small declarative sources in `uiko.jsonc`; the compiler invents
+nothing, resolves and validates everything, and lowers to a deterministic
+application plan a renderer executes. The thesis is one chain:
 
-## Current status
+> **reduce invention → compile behavior → review semantics → govern execution**
 
-**Bootstrap / Week 0.** This repository does not yet claim a working JSONC compiler, renderer, runtime, security boundary, or measured product advantage.
+Each link is gated by measurement before the next gets investment.
 
-The first engineering milestone is **M0**:
+## Status
+
+| Gate | Question | State |
+|---|---|---|
+| **G0** | Does uiko make an agent author materially less application code? | **GO** — paired pilot 2026-09-18: both arms passed acceptance 4/4, ~3× fewer application tokens ([ADR 0004](docs/adr/0004-g0-pilot-go.md), [evidence](experiments/g0/results/pilot-2026-09-18/README.md)) |
+| **G1** | Are semantic plan diffs complete and useful to human reviewers? | Next — [#38](https://github.com/jmtrs/uiko/issues/38), [#39](https://github.com/jmtrs/uiko/issues/39) |
+| **Bet B** | Managed runtime (authz, audit, mutations) | Gated on G1 |
+
+Working today: strict JSONC source adapter, pure semantic compiler with
+stable diagnostics, `UiManifest` lowering, Vue/json-render host, OpenAPI read
+compilation through a logical query gateway, page-local state with
+Select/Pagination/Table controls, deterministic G0 experiment core (tasks,
+bases, shared Playwright acceptance).
+
+## Pipeline
 
 ```text
 uiko.jsonc
@@ -16,23 +32,24 @@ uiko.jsonc
   -> resolve / type-check / lower
   -> deterministic AppIr
   -> UiManifest
-  -> minimal renderer
+  -> renderer (Vue host / json-render)
 ```
 
-Invalid source must fail before browser execution with stable machine-readable diagnostics.
+Invalid source fails before browser execution with stable machine-readable
+diagnostics.
 
 ## Repository shape
 
 ```text
-crates/uiko-core       semantic primitives and canonical model boundaries
-crates/uiko-source     authoring-neutral source DTOs
-crates/uiko-compiler   pure semantic compilation passes + diagnostics
-crates/uiko-cli        thin CLI shell; no independent semantics
-fixtures/              acceptance fixtures, starting with support-console
-baselines/b-full       strong conventional frontend comparison arm
-experiments/           G0/G1 task manifests and instrumentation material
-docs/architecture      product + technical architecture specification
-docs/adr               architecture decision records
+crates/            uiko-{core,source,source-jsonc,compiler,manifest,
+                   runtime-plan,capabilities,openapi,project,cli,
+                   g0-gateway,g0-runner}
+hosts/             Vue rendering host
+fixtures/          support-console acceptance fixture
+baselines/         b-full conventional frontend comparison arm
+experiments/       G0 task manifests, instrumentation, results
+docs/architecture  normative product + technical specification
+docs/adr           architecture decision records
 ```
 
 ## Build
@@ -45,12 +62,8 @@ cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo test --workspace --locked
 ```
 
-## Product gates
+## Reading order
 
-uiko is gated deliberately:
-
-1. **G0:** show materially less agent-authored implementation and less wiring/coherence repair than a strong typed frontend baseline.
-2. **G1:** show that semantic plan diffs are complete and useful to human reviewers.
-3. Only then build substantial managed-runtime functionality.
-
-See `docs/architecture/uiko_Product_Technical_Architecture_PoC_v0.16.md` for the normative working specification.
+1. [Architecture specification](docs/architecture/uiko_Product_Technical_Architecture_PoC_v0.16.md) — normative
+2. [ADRs](docs/adr/) — decisions to date
+3. [G0 experiment](experiments/g0/README.md) — protocol, pilot evidence, results
