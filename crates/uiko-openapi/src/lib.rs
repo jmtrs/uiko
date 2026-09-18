@@ -65,17 +65,14 @@ pub fn import_openapi_provider(
         )]);
     }
 
-    let paths = raw
-        .get("paths")
-        .and_then(Value::as_object)
-        .ok_or_else(|| {
-            vec![diagnostic(
-                "UIKO2003",
-                "OpenAPI document must contain a paths object",
-                source_id,
-                text,
-            )]
-        })?;
+    let paths = raw.get("paths").and_then(Value::as_object).ok_or_else(|| {
+        vec![diagnostic(
+            "UIKO2003",
+            "OpenAPI document must contain a paths object",
+            source_id,
+            text,
+        )]
+    })?;
 
     let mut operations = BTreeMap::new();
     let mut diagnostics = Vec::new();
@@ -212,7 +209,10 @@ fn import_parameters(operation: &Map<String, Value>) -> Result<Vec<OperationPara
     Ok(result)
 }
 
-fn import_success_output(raw: &Value, operation: &Map<String, Value>) -> Result<ValueShape, String> {
+fn import_success_output(
+    raw: &Value,
+    operation: &Map<String, Value>,
+) -> Result<ValueShape, String> {
     let responses = operation
         .get("responses")
         .and_then(Value::as_object)
@@ -259,7 +259,9 @@ fn import_schema(
     if let Some(reference) = object.get("$ref").and_then(Value::as_str) {
         let name = reference
             .strip_prefix("#/components/schemas/")
-            .ok_or_else(|| format!("only local component schema refs are supported: {reference}"))?;
+            .ok_or_else(|| {
+                format!("only local component schema refs are supported: {reference}")
+            })?;
         if !stack.insert(name.to_string()) {
             return Err(format!("recursive schema `{name}` is not supported in M4"));
         }
@@ -377,7 +379,12 @@ fn reject_unsupported_schema_keywords(object: &Map<String, Value>) -> Result<(),
     Ok(())
 }
 
-fn diagnostic(code: &'static str, message: impl Into<String>, source_id: &SourceId, text: &str) -> Diagnostic {
+fn diagnostic(
+    code: &'static str,
+    message: impl Into<String>,
+    source_id: &SourceId,
+    text: &str,
+) -> Diagnostic {
     Diagnostic::error(
         code,
         message,
