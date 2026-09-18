@@ -64,6 +64,7 @@ const scratchRoot = await mkdtemp(
 const worktree = resolve(scratchRoot, "worktree");
 let environment;
 const taskBases = {};
+const predecessorAcceptance = {};
 
 try {
   addWorktree(sourceRepo, worktree, harnessRevision);
@@ -80,6 +81,18 @@ try {
         prerequisiteManifest,
       });
       taskBases[arm][task.id] = prepared.baseRevision;
+
+      const prerequisiteStage = prerequisiteManifest.taskBases[arm][task.id];
+      if (prerequisiteStage !== "EMPTY") {
+        const predecessorTask = predecessorTaskForStage(prerequisiteStage);
+        runPrerequisiteAcceptance(worktree, arm, predecessorTask);
+        predecessorAcceptance[arm] ??= {};
+        predecessorAcceptance[arm][task.id] = {
+          baseRevision: prepared.baseRevision,
+          predecessorTask,
+          passed: true,
+        };
+      }
     }
   }
 
@@ -100,6 +113,7 @@ const lock = {
   frozenAt: new Date().toISOString(),
   harnessRevision,
   taskBases,
+  predecessorAcceptance,
   agent: {
     provider: "openai",
     codexCliVersion: adapterLock.codexCli.version,
@@ -126,6 +140,45 @@ process.stdout.write(
     `codex=${environment.codex.versionOutput}\n` +
     `codexSha256=${environment.codex.sha256}\n`,
 );
+
+function predecessorTaskForStage(stage) {
+  const mapping = {
+    D01: "G0-D01",
+    D02: "G0-D02",
+    D03: "G0-D03",
+  };
+  const taskId = mapping[stage];
+  if (taskId === undefined) {
+    throw new Error(`no predecessor acceptance mapping for stage ${stage}`);
+  }
+  return taskId;
+}
+
+function runPrerequisiteAcceptance(repoRoot, arm, taskId) {
+  const result = spawnSync(
+    process.execPath,
+    [
+      "experiments/g0/harness/run-acceptance.mjs",
+      "--arm",
+      arm,
+      "--task",
+      taskId,
+      "--repo",
+      repoRoot,
+      "--prerequisite",
+    ],
+    {
+      cwd: repoRoot,
+      encoding: "utf8",
+      maxBuffer: 16 * 1024 * 1024,
+    },
+  );
+  if (result.status !== 0) {
+    throw new Error(
+      `predecessor acceptance failed for ${arm}/${taskId}:\n${result.stdout || ""}\n${result.stderr || ""}`,
+    );
+  }
+}
 
 function frozenArms(manifest) {
   return [
