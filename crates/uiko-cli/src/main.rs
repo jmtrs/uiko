@@ -1,6 +1,14 @@
 #![forbid(unsafe_code)]
 
-use std::process::ExitCode;
+use std::{
+    fmt::Write as _,
+    path::PathBuf,
+    process::ExitCode,
+};
+
+use uiko_compiler::compile;
+use uiko_core::{Diagnostic, Severity};
+use uiko_project::load_project;
 
 fn main() -> ExitCode {
     let mut args = std::env::args().skip(1);
@@ -14,18 +22,179 @@ fn main() -> ExitCode {
             println!("uiko {}", env!("CARGO_PKG_VERSION"));
             ExitCode::SUCCESS
         }
+        Some("validate") => validate(args.collect()),
         Some(command) => {
-            eprintln!(
-                "UIKO0001: command `{command}` is not implemented in the bootstrap milestone"
-            );
+            eprintln!("UIKO0001: unknown command `{command}`");
             ExitCode::from(2)
         }
     }
 }
 
+fn validate(args: Vec<String>) -> ExitCode {
+    let mut project = PathBuf::from(".");
+    let mut project_set = false;
+    let mut json = false;
+    let mut index = 0;
+
+    while index < args.len() {
+        match args[index].as_str() {
+            "--format" => {
+                let Some(value) = args.get(index + 1) else {
+                    eprintln!("UIKO0002: --format requires a value");
+                    return ExitCode::from(2);
+                };
+                if value != "json" {
+                    eprintln!("UIKO0002: unsupported format `{value}`; expected `json`");
+                    return ExitCode::from(2);
+                }
+                json = true;
+                index += 2;
+            }
+            "--format=json" => {
+                json = true;
+                index += 1;
+            }
+            option if option.starts_with('-') => {
+                eprintln!("UIKO0002: unknown validate option `{option}`");
+                return ExitCode::from(2);
+            }
+            path if !project_set => {
+                project = PathBuf::from(path);
+                project_set = true;
+                index += 1;
+            }
+            extra => {
+                eprintln!("UIKO0002: unexpected validate argument `{extra}`");
+                return ExitCode::from(2);
+            }
+        }
+    }
+
+    let source = match load_project(&project) {
+        Ok(source) => source,
+        Err(diagnostics) => return emit_diagnostics(&diagnostics, json),
+    };
+    let ir = match compile(&source) {
+        Ok(ir) => ir,
+        Err(diagnostics) => return emit_diagnostics(&diagnostics, json),
+    };
+
+    if json {
+        println!(
+            "{{\"status\":\"ok\",\"app\":\"{}\",\"modules\":{}}}",
+            json_escape(&ir.app_name),
+            ir.modules.len()
+        );
+    } else {
+        println!(
+            "valid: {} ({} module{})",
+            ir.app_name,
+            ir.modules.len(),
+            if ir.modules.len() == 1 { "" } else { "s" }
+        );
+    }
+
+    ExitCode::SUCCESS
+}
+
+fn emit_diagnostics(diagnostics: &[Diagnostic], json: bool) -> ExitCode {
+    if json {
+        println!("{}", diagnostics_json(diagnostics));
+    } else {
+        for diagnostic in diagnostics {
+            eprintln!(
+                "{} {}:{}-{} {}",
+                diagnostic.code,
+                diagnostic.span.source.as_str(),
+                diagnostic.span.start,
+                diagnostic.span.end,
+                diagnostic.message
+            );
+        }
+    }
+
+    ExitCode::from(1)
+}
+
+fn diagnostics_json(diagnostics: &[Diagnostic]) -> String {
+    let mut output = String::from("{\"status\":\"error\",\"diagnostics\":[");
+
+    for (index, diagnostic) in diagnostics.iter().enumerate() {
+        if index > 0 {
+            output.push(',');
+        }
+        let severity = match diagnostic.severity {
+            Severity::Error => "error",
+            Severity::Warning => "warning",
+        };
+        write!(
+            output,
+            "{{\"code\":\"{}\",\"severity\":\"{}\",\"message\":\"{}\",\"source\":\"{}\",\"start\":{},\"end\":{}}}",
+            json_escape(diagnostic.code),
+            severity,
+            json_escape(&diagnostic.message),
+            json_escape(diagnostic.span.source.as_str()),
+            diagnostic.span.start,
+            diagnostic.span.end
+        )
+        .expect("writing JSON to String cannot fail");
+    }
+
+    output.push_str("]}");
+    output
+}
+
+fn json_escape(value: &str) -> String {
+    let mut escaped = String::with_capacity(value.len());
+
+    for character in value.chars() {
+        match character {
+            '"' => escaped.push_str("\\\""),
+            '\\' => escaped.push_str("\\\\"),
+            '\n' => escaped.push_str("\\n"),
+            '\r' => escaped.push_str("\\r"),
+            '\t' => escaped.push_str("\\t"),
+            control if control <= '\u{001f}' => {
+                write!(escaped, "\\u{:04x}", u32::from(control))
+                    .expect("writing JSON escape to String cannot fail");
+            }
+            other => escaped.push(other),
+        }
+    }
+
+    escaped
+}
+
 fn print_help() {
     println!(
-        "uiko {}\n\nBootstrap CLI. Semantic commands arrive with the compiler slice.\n\nUSAGE:\n    uiko [--help|--version]",
+        "uiko {}\n\nUSAGE:\n    uiko [--help|--version]\n    uiko validate [PROJECT] [--format json]\n\nCOMMANDS:\n    validate    load and compile a uiko project without browser execution",
         env!("CARGO_PKG_VERSION")
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use uiko_core::{Diagnostic, SourceId, TextSpan};
+
+    use super::{diagnostics_json, json_escape};
+
+    #[test]
+    fn json_escape_handles_machine_output_characters() {
+        assert_eq!(json_escape("a\"b\\c\n"), "a\\\"b\\\\c\\n");
+    }
+
+    #[test]
+    fn diagnostics_json_contains_stable_machine_fields() {
+        let diagnostics = vec![Diagnostic::error(
+            "UIKO9999",
+            "broken \"thing\"",
+            TextSpan::new(SourceId::new("features/test.jsonc"), 4, 8),
+        )];
+
+        let json = diagnostics_json(&diagnostics);
+        assert!(json.contains("\"code\":\"UIKO9999\""));
+        assert!(json.contains("\"source\":\"features/test.jsonc\""));
+        assert!(json.contains("\"start\":4"));
+        assert!(json.contains("\"end\":8"));
+    }
 }
