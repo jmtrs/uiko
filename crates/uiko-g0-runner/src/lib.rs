@@ -2,7 +2,9 @@
 
 use std::{
     collections::{BTreeMap, BTreeSet},
+    fmt::Write as _,
     fs,
+    io::Write as _,
     path::{Component, Path, PathBuf},
     process::Command,
     sync::LazyLock,
@@ -65,8 +67,8 @@ pub enum EventPayload {
         base_revision: String,
         started_at: String,
         started_unix_ms: u64,
-        model: ModelMetadata,
-        environment: EnvironmentMetadata,
+        model: Box<ModelMetadata>,
+        environment: Box<EnvironmentMetadata>,
     },
     RepositoryRead {
         target: String,
@@ -438,7 +440,6 @@ pub fn append_event(trace_path: &Path, event_json: &str) -> Result<(), String> {
     let mut line = serde_json::to_string(&event)
         .map_err(|error| format!("cannot serialize event: {error}"))?;
     line.push('\n');
-    use std::io::Write as _;
     let mut file = fs::OpenOptions::new()
         .create(true)
         .append(true)
@@ -464,7 +465,28 @@ pub fn aggregate_run(
         .map_err(|error| format!("cannot resolve repository root: {error}"))?;
     let events = read_trace(trace_path)?;
     let identity = validate_trace_identity(&events)?;
+    let classifier = load_classifier(path_policy_path, &repo_root, identity.arm)?;
 
+    verify_git_revision(&repo_root, &identity.start.base_revision)?;
+
+    let mut state = AggregationState::new(
+        &repo_root,
+        &identity.start.base_revision,
+        &classifier,
+    );
+    for event in &events {
+        state.process_event(event)?;
+    }
+
+    let final_measurements = state.measure_final_state()?;
+    state.finish(identity, final_measurements)
+}
+
+fn load_classifier(
+    path_policy_path: &Path,
+    repo_root: &Path,
+    arm: Arm,
+) -> Result<PathClassifier, String> {
     let policy_text = fs::read_to_string(path_policy_path).map_err(|error| {
         format!(
             "cannot read path policy {}: {error}",
@@ -473,41 +495,82 @@ pub fn aggregate_run(
     })?;
     let policy: PathPolicy = serde_json::from_str(&policy_text)
         .map_err(|error| format!("invalid path policy JSON: {error}"))?;
-    let classifier = PathClassifier::from_policy(&repo_root, &policy, identity.arm)?;
+    PathClassifier::from_policy(repo_root, &policy, arm)
+}
 
-    verify_git_revision(&repo_root, &identity.start.base_revision)?;
+struct FinalMeasurements {
+    accepted_change_tokens: u64,
+    changed_bytes: u64,
+    changed_lines: u64,
+}
 
-    let mut base_cache = BTreeMap::<String, Option<String>>::new();
-    let mut last_after = BTreeMap::<String, Option<String>>::new();
-    let mut edit_trace = Vec::new();
-    let mut touched_application = BTreeSet::new();
-    let mut cumulative_authored = 0_u64;
-    let mut non_application = 0_u64;
-    let mut read_operations = 0_u64;
-    let mut search_operations = 0_u64;
-    let mut edit_operations = 0_u64;
-    let mut validation_invocations = 0_u64;
-    let mut browser_invocations = 0_u64;
-    let mut provider_input_tokens = None;
-    let mut provider_output_tokens = None;
-    let mut repairs = Vec::new();
-    let mut acceptance = BTreeMap::<u32, AcceptanceResult>::new();
-    let mut deviations = Vec::new();
-    let mut core_modification = false;
-    let mut generated_glue_touched = false;
+struct AggregationState<'a> {
+    repo_root: &'a Path,
+    base_revision: &'a str,
+    classifier: &'a PathClassifier,
+    base_cache: BTreeMap<String, Option<String>>,
+    last_after: BTreeMap<String, Option<String>>,
+    edit_trace: Vec<EditTraceResult>,
+    touched_application: BTreeSet<String>,
+    cumulative_authored: u64,
+    non_application: u64,
+    read_operations: u64,
+    search_operations: u64,
+    edit_operations: u64,
+    validation_invocations: u64,
+    browser_invocations: u64,
+    provider_input_tokens: Option<u64>,
+    provider_output_tokens: Option<u64>,
+    repairs: Vec<RepairResult>,
+    acceptance: BTreeMap<u32, AcceptanceResult>,
+    deviations: Vec<ProtocolDeviationResult>,
+    core_modification: bool,
+    generated_glue_touched: bool,
+}
 
-    for event in &events {
+impl<'a> AggregationState<'a> {
+    fn new(
+        repo_root: &'a Path,
+        base_revision: &'a str,
+        classifier: &'a PathClassifier,
+    ) -> Self {
+        Self {
+            repo_root,
+            base_revision,
+            classifier,
+            base_cache: BTreeMap::new(),
+            last_after: BTreeMap::new(),
+            edit_trace: Vec::new(),
+            touched_application: BTreeSet::new(),
+            cumulative_authored: 0,
+            non_application: 0,
+            read_operations: 0,
+            search_operations: 0,
+            edit_operations: 0,
+            validation_invocations: 0,
+            browser_invocations: 0,
+            provider_input_tokens: None,
+            provider_output_tokens: None,
+            repairs: Vec::new(),
+            acceptance: BTreeMap::new(),
+            deviations: Vec::new(),
+            core_modification: false,
+            generated_glue_touched: false,
+        }
+    }
+
+    fn process_event(&mut self, event: &TraceEvent) -> Result<(), String> {
         match &event.payload {
-            EventPayload::RepositoryRead { .. } => read_operations += 1,
-            EventPayload::RepositorySearch { .. } => search_operations += 1,
-            EventPayload::Validation { .. } => validation_invocations += 1,
-            EventPayload::Browser { .. } => browser_invocations += 1,
+            EventPayload::RepositoryRead { .. } => self.read_operations += 1,
+            EventPayload::RepositorySearch { .. } => self.search_operations += 1,
+            EventPayload::Validation { .. } => self.validation_invocations += 1,
+            EventPayload::Browser { .. } => self.browser_invocations += 1,
             EventPayload::ProviderTokens {
                 input_tokens,
                 output_tokens,
             } => {
-                *provider_input_tokens.get_or_insert(0) += *input_tokens;
-                *provider_output_tokens.get_or_insert(0) += *output_tokens;
+                *self.provider_input_tokens.get_or_insert(0) += *input_tokens;
+                *self.provider_output_tokens.get_or_insert(0) += *output_tokens;
             }
             EventPayload::Repair {
                 iteration,
@@ -515,7 +578,7 @@ pub fn aggregate_run(
                 reason,
                 evidence,
                 source_paths,
-            } => repairs.push(RepairResult {
+            } => self.repairs.push(RepairResult {
                 iteration: *iteration,
                 category: *category,
                 reason: reason.clone(),
@@ -527,7 +590,7 @@ pub fn aggregate_run(
                 passed,
                 evidence,
             } => {
-                acceptance.insert(
+                self.acceptance.insert(
                     *criterion_index,
                     AcceptanceResult {
                         criterion_index: *criterion_index,
@@ -540,7 +603,7 @@ pub fn aggregate_run(
                 code,
                 description,
                 impact,
-            } => deviations.push(ProtocolDeviationResult {
+            } => self.deviations.push(ProtocolDeviationResult {
                 code: code.clone(),
                 description: description.clone(),
                 impact: *impact,
@@ -550,184 +613,231 @@ pub fn aggregate_run(
                 operation,
                 before_text,
                 after_text,
-            } => {
-                edit_operations += 1;
-                let path = normalize_relative_path(path)?;
-                validate_edit_sides(*operation, before_text, after_text)?;
+            } => self.process_edit(
+                event.sequence,
+                path,
+                *operation,
+                before_text.as_deref(),
+                after_text.as_deref(),
+            )?,
+            EventPayload::RunStart { .. } | EventPayload::RunEnd { .. } => {}
+        }
+        Ok(())
+    }
 
-                let expected_before = if let Some(previous) = last_after.get(&path) {
-                    previous.clone()
-                } else {
-                    let base = base_content(&repo_root, &identity.start.base_revision, &path)?;
-                    base_cache.insert(path.clone(), base.clone());
-                    base
-                };
-                if &expected_before != before_text {
-                    return Err(format!(
-                        "edit sequence {} for `{path}` does not match the previous/base content",
-                        event.sequence
-                    ));
-                }
+    fn process_edit(
+        &mut self,
+        sequence: u64,
+        path: &str,
+        operation: EditOperation,
+        before_text: Option<&str>,
+        after_text: Option<&str>,
+    ) -> Result<(), String> {
+        self.edit_operations += 1;
+        let path = normalize_relative_path(path)?;
+        validate_edit_sides(operation, before_text, after_text)?;
 
-                let path_class = classifier.classify(&path);
-                let inserted = inserted_token_count(
-                    before_text.as_deref().unwrap_or(""),
-                    after_text.as_deref().unwrap_or(""),
-                ) as u64;
+        let expected_before = if let Some(previous) = self.last_after.get(&path) {
+            previous.clone()
+        } else {
+            let base = base_content(self.repo_root, self.base_revision, &path)?;
+            self.base_cache.insert(path.clone(), base.clone());
+            base
+        };
+        if expected_before.as_deref() != before_text {
+            return Err(format!(
+                "edit sequence {sequence} for `{path}` does not match the previous/base content"
+            ));
+        }
 
-                match path_class {
-                    PathClass::Application => {
-                        cumulative_authored += inserted;
-                        touched_application.insert(path.clone());
-                    }
-                    PathClass::Core => {
-                        non_application += inserted;
-                        core_modification = true;
-                    }
-                    PathClass::Generated => {
-                        non_application += inserted;
-                        generated_glue_touched = true;
-                    }
-                    PathClass::Harness => {
-                        non_application += inserted;
-                        deviations.push(ProtocolDeviationResult {
-                            code: "G0_TRACE_HARNESS_EDIT".into(),
+        let path_class = self.classifier.classify(&path);
+        let inserted = inserted_token_count(
+            before_text.unwrap_or(""),
+            after_text.unwrap_or(""),
+        ) as u64;
+        self.account_edit(path_class, &path, sequence, inserted);
+
+        self.edit_trace.push(EditTraceResult {
+            sequence,
+            path: path.clone(),
+            path_class,
+            operation,
+            before_sha256: before_text.map(sha256_hex),
+            after_sha256: after_text.map(sha256_hex),
+            inserted_tokens: inserted,
+        });
+        self.last_after
+            .insert(path, after_text.map(str::to_string));
+        Ok(())
+    }
+
+    fn account_edit(
+        &mut self,
+        path_class: PathClass,
+        path: &str,
+        sequence: u64,
+        inserted: u64,
+    ) {
+        match path_class {
+            PathClass::Application => {
+                self.cumulative_authored += inserted;
+                self.touched_application.insert(path.to_string());
+            }
+            PathClass::Core => {
+                self.non_application += inserted;
+                self.core_modification = true;
+            }
+            PathClass::Generated => {
+                self.non_application += inserted;
+                self.generated_glue_touched = true;
+            }
+            PathClass::Harness => {
+                self.non_application += inserted;
+                self.deviations.push(ProtocolDeviationResult {
+                    code: "G0_TRACE_HARNESS_EDIT".into(),
+                    description: format!(
+                        "harness-owned path `{path}` was edited at sequence {sequence}"
+                    ),
+                    impact: DeviationImpact::Invalidating,
+                });
+            }
+            PathClass::Other => self.non_application += inserted,
+        }
+    }
+
+    fn measure_final_state(&mut self) -> Result<FinalMeasurements, String> {
+        let final_paths = changed_paths(self.repo_root, self.base_revision)?;
+        let mut measurements = FinalMeasurements {
+            accepted_change_tokens: 0,
+            changed_bytes: 0,
+            changed_lines: 0,
+        };
+
+        for path in &final_paths {
+            let path_class = self.classifier.classify(path);
+            let before = if let Some(cached) = self.base_cache.get(path) {
+                cached.clone()
+            } else {
+                base_content(self.repo_root, self.base_revision, path)?
+            };
+            let after = worktree_content(self.repo_root, path)?;
+            let before_text = before.as_deref().unwrap_or("");
+            let after_text = after.as_deref().unwrap_or("");
+
+            match path_class {
+                PathClass::Application => {
+                    measurements.accepted_change_tokens +=
+                        inserted_token_count(before_text, after_text) as u64;
+                    measurements.changed_bytes +=
+                        myers_distance(before_text.as_bytes(), after_text.as_bytes()) as u64;
+                    let before_lines: Vec<_> = before_text.split_inclusive('\n').collect();
+                    let after_lines: Vec<_> = after_text.split_inclusive('\n').collect();
+                    measurements.changed_lines +=
+                        myers_distance(&before_lines, &after_lines) as u64;
+                    self.touched_application.insert(path.clone());
+
+                    if !self.last_after.contains_key(path) {
+                        self.deviations.push(ProtocolDeviationResult {
+                            code: "G0_TRACE_UNTRACED_APP_CHANGE".into(),
                             description: format!(
-                                "harness-owned path `{path}` was edited at sequence {}",
-                                event.sequence
+                                "application-owned final change `{path}` has no edit event"
                             ),
                             impact: DeviationImpact::Invalidating,
                         });
                     }
-                    PathClass::Other => non_application += inserted,
                 }
+                PathClass::Core => self.core_modification = true,
+                PathClass::Generated => self.generated_glue_touched = true,
+                PathClass::Harness => self.deviations.push(ProtocolDeviationResult {
+                    code: "G0_TRACE_HARNESS_FINAL_CHANGE".into(),
+                    description: format!(
+                        "harness-owned path `{path}` differs from the base revision"
+                    ),
+                    impact: DeviationImpact::Invalidating,
+                }),
+                PathClass::Other => {}
+            }
+        }
 
-                edit_trace.push(EditTraceResult {
-                    sequence: event.sequence,
-                    path: path.clone(),
-                    path_class,
-                    operation: *operation,
-                    before_sha256: before_text.as_deref().map(sha256_hex),
-                    after_sha256: after_text.as_deref().map(sha256_hex),
-                    inserted_tokens: inserted,
+        Ok(measurements)
+    }
+
+    fn reconcile_last_edits(&mut self) -> Result<(), String> {
+        for (path, expected) in &self.last_after {
+            let actual = worktree_content(self.repo_root, path)?;
+            if &actual != expected {
+                self.deviations.push(ProtocolDeviationResult {
+                    code: "G0_TRACE_MISSING_EDIT".into(),
+                    description: format!(
+                        "final worktree content for `{path}` does not match the last edit event"
+                    ),
+                    impact: DeviationImpact::Invalidating,
                 });
-                last_after.insert(path, after_text.clone());
             }
-            EventPayload::RunStart { .. } | EventPayload::RunEnd { .. } => {}
         }
+        Ok(())
     }
 
-    let final_paths = changed_paths(&repo_root, &identity.start.base_revision)?;
-    let mut accepted_change_tokens = 0_u64;
-    let mut changed_bytes = 0_u64;
-    let mut changed_lines = 0_u64;
+    fn finish(
+        mut self,
+        identity: TraceIdentity,
+        measurements: FinalMeasurements,
+    ) -> Result<RunResult, String> {
+        self.reconcile_last_edits()?;
 
-    for path in &final_paths {
-        let path_class = classifier.classify(path);
-        let before = if let Some(cached) = base_cache.get(path) {
-            cached.clone()
-        } else {
-            base_content(&repo_root, &identity.start.base_revision, path)?
-        };
-        let after = worktree_content(&repo_root, path)?;
-        let before_text = before.as_deref().unwrap_or("");
-        let after_text = after.as_deref().unwrap_or("");
-
-        match path_class {
-            PathClass::Application => {
-                accepted_change_tokens += inserted_token_count(before_text, after_text) as u64;
-                changed_bytes +=
-                    myers_distance(before_text.as_bytes(), after_text.as_bytes()) as u64;
-                let before_lines: Vec<_> = before_text.split_inclusive('\n').collect();
-                let after_lines: Vec<_> = after_text.split_inclusive('\n').collect();
-                changed_lines += myers_distance(&before_lines, &after_lines) as u64;
-                touched_application.insert(path.clone());
-
-                if !last_after.contains_key(path) {
-                    deviations.push(ProtocolDeviationResult {
-                        code: "G0_TRACE_UNTRACED_APP_CHANGE".into(),
-                        description: format!(
-                            "application-owned final change `{path}` has no edit event"
-                        ),
-                        impact: DeviationImpact::Invalidating,
-                    });
-                }
-            }
-            PathClass::Core => core_modification = true,
-            PathClass::Generated => generated_glue_touched = true,
-            PathClass::Harness => deviations.push(ProtocolDeviationResult {
-                code: "G0_TRACE_HARNESS_FINAL_CHANGE".into(),
-                description: format!("harness-owned path `{path}` differs from the base revision"),
-                impact: DeviationImpact::Invalidating,
-            }),
-            PathClass::Other => {}
+        let mut outcome = identity.end.outcome;
+        if self
+            .deviations
+            .iter()
+            .any(|deviation| deviation.impact == DeviationImpact::Invalidating)
+        {
+            outcome = Outcome::Invalidated;
         }
+
+        let wall_clock_ms = identity
+            .end
+            .ended_unix_ms
+            .checked_sub(identity.start.started_unix_ms)
+            .ok_or_else(|| "run end time is earlier than run start time".to_string())?;
+
+        Ok(RunResult {
+            schema_version: RESULT_SCHEMA_VERSION,
+            protocol: PROTOCOL,
+            run_id: identity.run_id,
+            task_id: identity.task_id,
+            arm: identity.arm,
+            base_revision: identity.start.base_revision,
+            final_revision: identity.end.final_revision,
+            started_at: identity.start.started_at,
+            ended_at: identity.end.ended_at,
+            model: identity.start.model,
+            environment: identity.start.environment,
+            outcome,
+            metrics: Metrics {
+                accepted_change_tokens: measurements.accepted_change_tokens,
+                cumulative_authored_edit_tokens: self.cumulative_authored,
+                non_application_edit_tokens: self.non_application,
+                files_touched: self.touched_application.into_iter().collect(),
+                changed_bytes: measurements.changed_bytes,
+                changed_lines: measurements.changed_lines,
+                repository_read_operations: self.read_operations,
+                repository_search_operations: self.search_operations,
+                edit_operations: self.edit_operations,
+                validation_invocations: self.validation_invocations,
+                browser_invocations: self.browser_invocations,
+                acceptance_loop_actions: self.validation_invocations + self.browser_invocations,
+                provider_input_tokens: self.provider_input_tokens,
+                provider_output_tokens: self.provider_output_tokens,
+                wall_clock_ms,
+                core_modification: self.core_modification,
+                generated_glue_touched: self.generated_glue_touched,
+            },
+            repairs: self.repairs,
+            acceptance: self.acceptance.into_values().collect(),
+            edit_trace: self.edit_trace,
+            protocol_deviations: self.deviations,
+        })
     }
-
-    for (path, expected) in &last_after {
-        let actual = worktree_content(&repo_root, path)?;
-        if &actual != expected {
-            deviations.push(ProtocolDeviationResult {
-                code: "G0_TRACE_MISSING_EDIT".into(),
-                description: format!(
-                    "final worktree content for `{path}` does not match the last edit event"
-                ),
-                impact: DeviationImpact::Invalidating,
-            });
-        }
-    }
-
-    let mut outcome = identity.end.outcome;
-    if deviations
-        .iter()
-        .any(|deviation| deviation.impact == DeviationImpact::Invalidating)
-    {
-        outcome = Outcome::Invalidated;
-    }
-
-    let wall_clock_ms = identity
-        .end
-        .ended_unix_ms
-        .checked_sub(identity.start.started_unix_ms)
-        .ok_or_else(|| "run end time is earlier than run start time".to_string())?;
-
-    Ok(RunResult {
-        schema_version: RESULT_SCHEMA_VERSION,
-        protocol: PROTOCOL,
-        run_id: identity.run_id,
-        task_id: identity.task_id,
-        arm: identity.arm,
-        base_revision: identity.start.base_revision,
-        final_revision: identity.end.final_revision,
-        started_at: identity.start.started_at,
-        ended_at: identity.end.ended_at,
-        model: identity.start.model,
-        environment: identity.start.environment,
-        outcome,
-        metrics: Metrics {
-            accepted_change_tokens,
-            cumulative_authored_edit_tokens: cumulative_authored,
-            non_application_edit_tokens: non_application,
-            files_touched: touched_application.into_iter().collect(),
-            changed_bytes,
-            changed_lines,
-            repository_read_operations: read_operations,
-            repository_search_operations: search_operations,
-            edit_operations,
-            validation_invocations,
-            browser_invocations,
-            acceptance_loop_actions: validation_invocations + browser_invocations,
-            provider_input_tokens,
-            provider_output_tokens,
-            wall_clock_ms,
-            core_modification,
-            generated_glue_touched,
-        },
-        repairs,
-        acceptance: acceptance.into_values().collect(),
-        edit_trace,
-        protocol_deviations: deviations,
-    })
 }
 
 struct TraceIdentity {
@@ -838,8 +948,8 @@ fn validate_trace_identity(events: &[TraceEvent]) -> Result<TraceIdentity, Strin
             base_revision: base_revision.clone(),
             started_at: started_at.clone(),
             started_unix_ms: *started_unix_ms,
-            model: model.clone(),
-            environment: environment.clone(),
+            model: model.as_ref().clone(),
+            environment: environment.as_ref().clone(),
         },
         end: RunEndData {
             ended_at: ended_at.clone(),
@@ -871,8 +981,8 @@ fn validate_event_shape(event: &TraceEvent) -> Result<(), String> {
 
 fn validate_edit_sides(
     operation: EditOperation,
-    before: &Option<String>,
-    after: &Option<String>,
+    before: Option<&str>,
+    after: Option<&str>,
 ) -> Result<(), String> {
     let valid = match operation {
         EditOperation::Create => before.is_none() && after.is_some(),
@@ -1004,57 +1114,82 @@ pub fn inserted_token_count(before: &str, after: &str) -> usize {
         .map(|item| item.as_str())
         .collect();
     let distance = myers_distance(&before_tokens, &after_tokens);
-    let delta = after_tokens.len() as isize - before_tokens.len() as isize;
-    usize::try_from((distance as isize + delta) / 2)
-        .expect("Myers insertion count cannot be negative")
+
+    if after_tokens.len() >= before_tokens.len() {
+        (distance + after_tokens.len() - before_tokens.len()) / 2
+    } else {
+        distance
+            .checked_sub(before_tokens.len() - after_tokens.len())
+            .unwrap_or(0)
+            / 2
+    }
 }
 
 fn myers_distance<T: Eq>(before: &[T], after: &[T]) -> usize {
-    let n = before.len() as isize;
-    let m = after.len() as isize;
-    let max = n + m;
-    if max == 0 {
+    let Ok(before_len) = isize::try_from(before.len()) else {
+        return before.len().saturating_add(after.len());
+    };
+    let Ok(after_len) = isize::try_from(after.len()) else {
+        return before.len().saturating_add(after.len());
+    };
+    let Some(max_distance) = before_len.checked_add(after_len) else {
+        return before.len().saturating_add(after.len());
+    };
+    if max_distance == 0 {
         return 0;
     }
 
-    let offset = max + 1;
-    let mut v = vec![0_isize; usize::try_from(2 * max + 3).expect("vector size")];
-    v[usize::try_from(offset + 1).expect("offset")] = 0;
+    let offset = max_distance + 1;
+    let Some(vector_len_signed) = max_distance
+        .checked_mul(2)
+        .and_then(|value| value.checked_add(3))
+    else {
+        return before.len().saturating_add(after.len());
+    };
+    let Ok(vector_len) = usize::try_from(vector_len_signed) else {
+        return before.len().saturating_add(after.len());
+    };
+    let mut frontier = vec![0_isize; vector_len];
+    let offset_plus_one = usize::try_from(offset + 1).expect("positive Myers offset");
+    frontier[offset_plus_one] = 0;
 
-    for d in 0..=max {
-        let mut k = -d;
-        while k <= d {
-            let index = usize::try_from(k + offset).expect("non-negative Myers index");
-            let mut x = if k == -d || (k != d && v[index - 1] < v[index + 1]) {
-                v[index + 1]
-            } else {
-                v[index - 1] + 1
-            };
-            let mut y = x - k;
-
-            while x < n
-                && y < m
-                && before[usize::try_from(x).expect("x")] == after[usize::try_from(y).expect("y")]
+    for edit_depth in 0..=max_distance {
+        let mut diagonal = -edit_depth;
+        while diagonal <= edit_depth {
+            let index =
+                usize::try_from(diagonal + offset).expect("non-negative Myers frontier index");
+            let mut before_position = if diagonal == -edit_depth
+                || (diagonal != edit_depth && frontier[index - 1] < frontier[index + 1])
             {
-                x += 1;
-                y += 1;
-            }
-            v[index] = x;
+                frontier[index + 1]
+            } else {
+                frontier[index - 1] + 1
+            };
+            let mut after_position = before_position - diagonal;
 
-            if x >= n && y >= m {
-                return usize::try_from(d).expect("distance");
+            while before_position < before_len
+                && after_position < after_len
+                && before[usize::try_from(before_position).expect("before position")]
+                    == after[usize::try_from(after_position).expect("after position")]
+            {
+                before_position += 1;
+                after_position += 1;
             }
-            k += 2;
+            frontier[index] = before_position;
+
+            if before_position >= before_len && after_position >= after_len {
+                return usize::try_from(edit_depth).expect("non-negative edit distance");
+            }
+            diagonal += 2;
         }
     }
 
-    unreachable!("Myers must find a path within N+M edits")
+    before.len().saturating_add(after.len())
 }
 
 fn sha256_hex(text: &str) -> String {
     let digest = Sha256::digest(text.as_bytes());
     let mut output = String::with_capacity(digest.len() * 2);
-    use std::fmt::Write as _;
     for byte in digest {
         write!(output, "{byte:02x}").expect("writing hash to String cannot fail");
     }
