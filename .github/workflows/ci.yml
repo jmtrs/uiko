@@ -133,6 +133,51 @@ jobs:
           second_d05="$(bash ../../experiments/g0/materialize-prerequisite-base.sh B_FULL G0-D05 ../..)"
           test "$first_d05" = "$second_d05"
 
+  r-render-only:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: experiments/controls/r-render-only
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.21.0
+      - name: Use frozen npm
+        run: |
+          npm install --global npm@11.19.0
+          test "$(npm --version)" = "11.19.0"
+      - name: Install exact control dependencies
+        run: npm install --ignore-scripts --no-audit --no-fund
+      - name: Generate frozen OpenAPI types
+        run: npm run generate:api
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Build
+        run: npm run build
+
+  t-authoring:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: experiments/controls/t-authoring
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.21.0
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Use frozen npm
+        run: |
+          npm install --global npm@11.19.0
+          test "$(npm --version)" = "11.19.0"
+      - name: Install exact control dependencies
+        run: npm install --ignore-scripts --no-audit --no-fund
+      - name: Build through the real uiko compiler
+        run: npm run build
+      - name: Empty authoring base emits zero routes
+        run: jq -e '(.routes | length) == 0' generated/app.uiko-manifest.json > /dev/null
+
   g0-harness:
     runs-on: ubuntu-latest
     defaults:
@@ -184,6 +229,22 @@ jobs:
             experiments/g0/run-template.json \
             hosts/vue/package.json \
             hosts/vue/tsconfig.json
+      - name: G0 mechanism controls use exact frozen versions
+        run: |
+          jq -e '
+            .engines.node == "24.21.0"
+            and .packageManager == "npm@11.19.0"
+            and .dependencies["@json-render/core"] == "0.20.0"
+            and .dependencies["@json-render/react"] == "0.20.0"
+            and .dependencies.react == "19.2.8"
+            and .devDependencies.typescript == "5.9.3"
+          ' experiments/controls/r-render-only/package.json > /dev/null
+          jq -e '
+            .engines.node == "24.21.0"
+            and .packageManager == "npm@11.19.0"
+            and .devDependencies.typescript == "6.0.3"
+          ' experiments/controls/t-authoring/package.json > /dev/null
+          ! grep -R -n -E 'listCustomers|getCustomer|listCustomerOrders|/customers'             experiments/controls/r-render-only/src             experiments/controls/t-authoring/src
       - name: G0 acceptance harness uses frozen Playwright
         run: |
           jq -e '
