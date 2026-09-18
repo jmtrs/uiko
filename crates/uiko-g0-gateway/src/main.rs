@@ -1,10 +1,6 @@
 #![forbid(unsafe_code)]
 
-use std::{
-    collections::BTreeMap,
-    net::SocketAddr,
-    path::PathBuf,
-};
+use std::{collections::BTreeMap, net::SocketAddr, path::PathBuf};
 
 use tokio::net::TcpListener;
 use uiko_compiler::compile;
