@@ -158,6 +158,7 @@ async function main() {
       task: { type: "string" },
       trace: { type: "string" },
       repo: { type: "string" },
+      prerequisite: { type: "boolean", default: false },
     },
   });
 
@@ -169,11 +170,22 @@ async function main() {
   if (!["B_FULL", "C_UIKO", "R_RENDER_ONLY", "T_AUTHORING"].includes(values.arm)) {
     throw new Error(`unsupported G0 arm ${values.arm}`);
   }
-  if (
-    ["R_RENDER_ONLY", "T_AUTHORING"].includes(values.arm) &&
-    !["G0-D01", "G0-D02", "G0-D05"].includes(values.task)
-  ) {
+  const controlArm = ["R_RENDER_ONLY", "T_AUTHORING"].includes(values.arm);
+  const registeredControlTask = ["G0-D01", "G0-D02", "G0-D05"].includes(
+    values.task,
+  );
+  const controlPredecessorCheck =
+    values.prerequisite === true && values.task === "G0-D03";
+  if (controlArm && !registeredControlTask && !controlPredecessorCheck) {
     throw new Error(`task ${values.task} is not registered for ${values.arm}`);
+  }
+  if (
+    values.prerequisite === true &&
+    !["G0-D01", "G0-D02", "G0-D03"].includes(values.task)
+  ) {
+    throw new Error(
+      `task ${values.task} is not a frozen predecessor acceptance target`,
+    );
   }
   if (!(values.task in EXPECTED_CRITERIA)) {
     throw new Error(`invalid task id ${values.task}`);
