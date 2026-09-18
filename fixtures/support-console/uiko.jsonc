@@ -1,5 +1,5 @@
 {
-  // Minimal fixture shape. The JSONC adapter is intentionally not implemented yet.
+  // Minimal compiler fixture for the pre-G0 slice.
   "name": "support-console",
   "specVersion": 1,
   "modules": ["./features/customers"]
