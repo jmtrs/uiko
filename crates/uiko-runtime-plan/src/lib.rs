@@ -83,9 +83,7 @@ mod tests {
 
     use uiko_capabilities::{OperationParameter, ParameterLocation, ValueKind, ValueShape};
     use uiko_core::{AppIr, ModuleId, ModuleIr, PageIr, QueryIr};
-    use uiko_openapi::{
-        OpenApiGetTransport, OpenApiTransportCatalog, OpenApiTransportProvider,
-    };
+    use uiko_openapi::{OpenApiGetTransport, OpenApiTransportCatalog, OpenApiTransportProvider};
 
     use super::derive_read_runtime_plan;
 
