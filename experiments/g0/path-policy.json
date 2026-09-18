@@ -50,7 +50,8 @@
         "**/*.uiko-manifest.json"
       ],
       "harnessOwnedReadOnly": [
-        "experiments/**"
+        "experiments/**",
+        "fixtures/support-console/integrations/**"
       ],
       "coreOwned": [
         "crates/**",
