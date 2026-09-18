@@ -7,14 +7,14 @@ It deliberately contains no application contract parsing, upstream endpoint sele
 Generate the fixture manifest from the repository root:
 
 ```bash
-cargo run -p uiko-cli -- build fixtures/support-console \
+cargo run -p uiko-cli -- build experiments/fixtures/compiler-support-console \
   --ui-manifest hosts/vue/public/app.uiko-manifest.json
 ```
 
 Start the read-only G0 gateway with a deployment-owned base URL for the `crm` provider:
 
 ```bash
-cargo run -p uiko-g0-gateway -- fixtures/support-console \
+cargo run -p uiko-g0-gateway -- experiments/fixtures/compiler-support-console \
   --integration crm=http://127.0.0.1:4010
 ```
 
@@ -28,7 +28,7 @@ npm run dev
 
 The Vite development server proxies only the logical `/__uiko/*` boundary to the local gateway on port 3001. The browser bundle never receives the CRM base URL, OpenAPI path template or HTTP method.
 
-Routes in the current fixture:
+Routes in the harness-owned compiler fixture:
 
 - `/customers`
 - `/customers/:customerId`
