@@ -1,3 +1,4 @@
+import { createConnection } from "node:net";
 import { spawn, spawnSync } from "node:child_process";
 
 export function spawnManaged(command, args, options = {}) {
@@ -37,6 +38,25 @@ export async function waitForHttp(url, timeoutMs = 20_000) {
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
   throw new Error(`Timed out waiting for ${url}: ${String(lastError)}`);
+}
+
+export async function waitForTcp(port, host = "127.0.0.1", timeoutMs = 20_000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const connected = await new Promise((resolve) => {
+      const socket = createConnection({ host, port });
+      socket.once("connect", () => {
+        socket.destroy();
+        resolve(true);
+      });
+      socket.once("error", () => resolve(false));
+    });
+    if (connected) {
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  throw new Error(`Timed out waiting for tcp://${host}:${port}`);
 }
 
 export async function stopManaged(child) {
