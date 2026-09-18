@@ -7,25 +7,23 @@ import { parseArgs } from "node:util";
 import { prepareExecutionBase } from "../codex/prepare-base.mjs";
 
 const CASES = [
-  { arm: "B_FULL", successorTask: "G0-D03", predecessorTask: "G0-D01" },
-  { arm: "B_FULL", successorTask: "G0-D04", predecessorTask: "G0-D02" },
-  { arm: "B_FULL", successorTask: "G0-D05", predecessorTask: "G0-D03" },
-  { arm: "B_FULL", successorTask: "G0-D06", predecessorTask: "G0-D02" },
   { arm: "C_UIKO", successorTask: "G0-D03", predecessorTask: "G0-D01" },
   { arm: "C_UIKO", successorTask: "G0-D04", predecessorTask: "G0-D02" },
   { arm: "C_UIKO", successorTask: "G0-D05", predecessorTask: "G0-D03" },
   { arm: "C_UIKO", successorTask: "G0-D06", predecessorTask: "G0-D02" },
+  { arm: "B_FULL", successorTask: "G0-D03", predecessorTask: "G0-D01" },
+  { arm: "B_FULL", successorTask: "G0-D04", predecessorTask: "G0-D02" },
+  { arm: "B_FULL", successorTask: "G0-D05", predecessorTask: "G0-D03" },
+  { arm: "B_FULL", successorTask: "G0-D06", predecessorTask: "G0-D02" },
   {
     arm: "R_RENDER_ONLY",
     successorTask: "G0-D05",
     predecessorTask: "G0-D03",
-    preflight: true,
   },
   {
     arm: "T_AUTHORING",
     successorTask: "G0-D05",
     predecessorTask: "G0-D03",
-    preflight: true,
   },
 ];
 
@@ -69,9 +67,7 @@ try {
         "--repo",
         worktree,
       ];
-      if (item.preflight === true) {
-        args.push("--preflight");
-      }
+      args.push("--preflight");
 
       const acceptance = spawnSync(process.execPath, args, {
         cwd: worktree,
