@@ -1192,9 +1192,21 @@ fn sha256_hex(text: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use std::path::Path;
+    use std::{
+        collections::BTreeMap,
+        fs,
+        path::{Path, PathBuf},
+        process::Command,
+        time::{SystemTime, UNIX_EPOCH},
+    };
 
-    use super::{Arm, PathClass, PathClassifier, PathPolicy, inserted_token_count, myers_distance};
+    use super::{
+        aggregate_run, inserted_token_count, myers_distance, Arm, EditOperation,
+        EnvironmentMetadata, EventPayload, ModelMetadata, Outcome, PathClass, PathClassifier,
+        PathPolicy, TraceEvent,
+    };
+
+    const APP_PATH: &str = "fixtures/support-console/features/customers/metric.jsonc";
 
     #[test]
     fn frozen_tokenizer_counts_unicode_words_and_punctuation() {
@@ -1217,6 +1229,47 @@ mod tests {
     }
 
     #[test]
+    fn aggregate_counts_reverted_edit_but_no_accepted_change() {
+        let (repo, trace, base_revision) = test_repo("alpha\n");
+        write_trace(
+            &trace,
+            &[
+                run_start(1, &base_revision),
+                edit_event(2, "alpha\n", "alpha beta\n"),
+                edit_event(3, "alpha beta\n", "alpha\n"),
+                run_end(4),
+            ],
+        );
+
+        let result = aggregate_run(&repo, &trace, &frozen_path_policy()).expect("aggregate");
+        assert_eq!(result.metrics.cumulative_authored_edit_tokens, 1);
+        assert_eq!(result.metrics.accepted_change_tokens, 0);
+        assert_eq!(result.metrics.files_touched, vec![APP_PATH.to_string()]);
+
+        cleanup_test_repo(&repo, &trace);
+    }
+
+    #[test]
+    fn aggregate_counts_pure_final_deletion_as_zero_authored_tokens() {
+        let (repo, trace, base_revision) = test_repo("alpha beta\n");
+        fs::write(repo.join(APP_PATH), "alpha\n").expect("write final application state");
+        write_trace(
+            &trace,
+            &[
+                run_start(1, &base_revision),
+                edit_event(2, "alpha beta\n", "alpha\n"),
+                run_end(3),
+            ],
+        );
+
+        let result = aggregate_run(&repo, &trace, &frozen_path_policy()).expect("aggregate");
+        assert_eq!(result.metrics.cumulative_authored_edit_tokens, 0);
+        assert_eq!(result.metrics.accepted_change_tokens, 0);
+
+        cleanup_test_repo(&repo, &trace);
+    }
+
+    #[test]
     fn myers_distance_counts_insert_and_delete_for_replacement() {
         assert_eq!(myers_distance(&["a"], &["b"]), 2);
         assert_eq!(myers_distance(&["a", "b"], &["a", "b"]), 0);
@@ -1225,7 +1278,7 @@ mod tests {
     #[test]
     fn frozen_path_policy_classifies_primary_arms() {
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-        let policy_text = std::fs::read_to_string(root.join("experiments/g0/path-policy.json"))
+        let policy_text = fs::read_to_string(root.join("experiments/g0/path-policy.json"))
             .expect("frozen path policy");
         let policy: PathPolicy = serde_json::from_str(&policy_text).expect("path policy JSON");
 
@@ -1256,5 +1309,127 @@ mod tests {
             uiko.classify("crates/uiko-core/src/lib.rs"),
             PathClass::Core
         );
+    }
+
+    fn test_repo(initial: &str) -> (PathBuf, PathBuf, String) {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock after epoch")
+            .as_nanos();
+        let repo = std::env::temp_dir().join(format!("uiko-g0-metrics-{unique}"));
+        let trace = std::env::temp_dir().join(format!("uiko-g0-trace-{unique}.ndjson"));
+        let app_file = repo.join(APP_PATH);
+        fs::create_dir_all(app_file.parent().expect("application parent"))
+            .expect("create application path");
+        fs::write(&app_file, initial).expect("write baseline application file");
+
+        git(&repo, &["init", "-q"]);
+        git(&repo, &["config", "user.email", "g0@example.invalid"]);
+        git(&repo, &["config", "user.name", "G0 Test"]);
+        git(&repo, &["add", "."]);
+        git(&repo, &["commit", "-q", "-m", "base"]);
+        let revision = git(&repo, &["rev-parse", "HEAD"]);
+
+        (repo, trace, revision)
+    }
+
+    fn git(repo: &Path, args: &[&str]) -> String {
+        let output = Command::new("git")
+            .current_dir(repo)
+            .args(args)
+            .output()
+            .expect("git command");
+        assert!(
+            output.status.success(),
+            "git {args:?} failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        String::from_utf8(output.stdout)
+            .expect("UTF-8 git output")
+            .trim()
+            .to_string()
+    }
+
+    fn run_start(sequence: u64, base_revision: &str) -> TraceEvent {
+        TraceEvent {
+            schema_version: 1,
+            sequence,
+            run_id: "G0-D01-C_UIKO-r1".into(),
+            task_id: "G0-D01".into(),
+            arm: Arm::CUiko,
+            payload: EventPayload::RunStart {
+                base_revision: base_revision.into(),
+                started_at: "2026-09-18T00:00:00Z".into(),
+                started_unix_ms: 1_000,
+                model: Box::new(ModelMetadata {
+                    provider: "test".into(),
+                    model: "test".into(),
+                    model_version: "test".into(),
+                    agent_harness: "test".into(),
+                    parameters: serde_json::Map::new(),
+                    seed: None,
+                }),
+                environment: Box::new(EnvironmentMetadata {
+                    os: "test".into(),
+                    arch: "test".into(),
+                    node: None,
+                    rustc: None,
+                    browser: None,
+                    extra: BTreeMap::new(),
+                }),
+            },
+        }
+    }
+
+    fn edit_event(sequence: u64, before: &str, after: &str) -> TraceEvent {
+        TraceEvent {
+            schema_version: 1,
+            sequence,
+            run_id: "G0-D01-C_UIKO-r1".into(),
+            task_id: "G0-D01".into(),
+            arm: Arm::CUiko,
+            payload: EventPayload::Edit {
+                path: APP_PATH.into(),
+                operation: EditOperation::Update,
+                before_text: Some(before.into()),
+                after_text: Some(after.into()),
+            },
+        }
+    }
+
+    fn run_end(sequence: u64) -> TraceEvent {
+        TraceEvent {
+            schema_version: 1,
+            sequence,
+            run_id: "G0-D01-C_UIKO-r1".into(),
+            task_id: "G0-D01".into(),
+            arm: Arm::CUiko,
+            payload: EventPayload::RunEnd {
+                ended_at: "2026-09-18T00:00:01Z".into(),
+                ended_unix_ms: 2_000,
+                outcome: Outcome::Incomplete,
+                final_revision: None,
+            },
+        }
+    }
+
+    fn write_trace(path: &Path, events: &[TraceEvent]) {
+        let text = events
+            .iter()
+            .map(|event| serde_json::to_string(event).expect("serialize trace event"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        fs::write(path, format!("{text}\n")).expect("write trace");
+    }
+
+    fn frozen_path_policy() -> PathBuf {
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../..")
+            .join("experiments/g0/path-policy.json")
+    }
+
+    fn cleanup_test_repo(repo: &Path, trace: &Path) {
+        fs::remove_dir_all(repo).expect("remove temporary repository");
+        fs::remove_file(trace).expect("remove temporary trace");
     }
 }
