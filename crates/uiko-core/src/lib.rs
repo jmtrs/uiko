@@ -161,7 +161,6 @@ pub struct ComponentIr {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SelectOptionIr {
     pub label: String,
     pub value: StateValueIr,
