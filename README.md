@@ -1,10 +1,11 @@
 # uiko
 
-**A compiler-first UI system built for coding agents, not adapted to them.**
+**Coding agents write small declarative sources; the uiko compiler turns them into a deterministic application plan humans can review.**
 
-Agents author small declarative sources in `uiko.jsonc`; the compiler invents
-nothing, resolves and validates everything, and lowers to a deterministic
-application plan a renderer executes. The thesis is one chain:
+Agents author behavior in `uiko.jsonc` instead of inventing it in
+TypeScript. The compiler invents nothing: it resolves, validates and lowers
+everything to a plan a renderer executes, failing invalid source before it
+reaches the browser. The thesis is one chain:
 
 > **reduce invention → compile behavior → review semantics → govern execution**
 
