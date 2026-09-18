@@ -6,6 +6,7 @@ members = [
   "crates/uiko-source-jsonc",
   "crates/uiko-project",
   "crates/uiko-compiler",
+  "crates/uiko-manifest",
   "crates/uiko-cli",
 ]
 
