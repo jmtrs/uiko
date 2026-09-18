@@ -148,73 +148,20 @@ fn lower_page(
             continue;
         }
 
-        let Some((provider_id, operation_id)) =
-            parse_operation_reference(&query.value.operation.value)
-        else {
-            diagnostics.push(Diagnostic::error(
-                "UIKO2103",
-                format!(
-                    "operation reference `{}` must be `integration.operationId`",
-                    query.value.operation.value
-                ),
-                query.value.operation.span.clone(),
-            ));
-            continue;
-        };
-
-        let Some(provider) = capabilities.providers.get(provider_id) else {
-            diagnostics.push(Diagnostic::error(
-                "UIKO2102",
-                format!("unknown integration `{provider_id}`"),
-                query.value.operation.span.clone(),
-            ));
-            continue;
-        };
-        let Some(operation) = provider.operations.get(operation_id) else {
-            diagnostics.push(Diagnostic::error(
-                "UIKO2104",
-                format!("unknown operation `{operation_id}` on integration `{provider_id}`"),
-                query.value.operation.span.clone(),
-            ));
-            continue;
-        };
-
-        let query_diagnostics =
-            validate_query_input(&query.value, operation, &route_parameters, &state);
-        if !query_diagnostics.is_empty() {
-            diagnostics.extend(query_diagnostics);
-            continue;
+        match lower_query(
+            module_id,
+            page,
+            &query.value,
+            capabilities,
+            &route_parameters,
+            &state,
+        ) {
+            Ok((lowered, operation)) => {
+                query_aliases.insert(query.value.id.value.clone(), operation);
+                queries.push(lowered);
+            }
+            Err(errors) => diagnostics.extend(errors),
         }
-
-        let logical_id = format!(
-            "{module_id}.{}.query.{}",
-            page.id.value, query.value.id.value
-        );
-        queries.push(QueryIr {
-            id: logical_id,
-            alias: query.value.id.value.clone(),
-            provider_id: provider_id.to_string(),
-            external_operation_id: operation_id.to_string(),
-            input: query
-                .value
-                .input
-                .iter()
-                .filter_map(|binding| {
-                    let required = operation
-                        .parameters
-                        .iter()
-                        .find(|parameter| parameter.name == binding.value.name.value)
-                        .map(|parameter| parameter.required)?;
-                    Some(QueryInputIr {
-                        name: binding.value.name.value.clone(),
-                        expression: binding.value.expression.value.clone(),
-                        required,
-                    })
-                })
-                .collect(),
-            output: operation.output.clone(),
-        });
-        query_aliases.insert(query.value.id.value.clone(), operation);
     }
 
     for component in &page.components {
@@ -246,6 +193,79 @@ fn lower_page(
             .map(|component| lower_component(&component.value))
             .collect(),
     })
+}
+
+fn lower_query<'a>(
+    module_id: &str,
+    page: &PageSource,
+    query: &QuerySource,
+    capabilities: &'a CapabilityCatalog,
+    route_parameters: &BTreeSet<String>,
+    state: &BTreeMap<String, &StateSource>,
+) -> Result<(QueryIr, &'a QueryOperation), Vec<Diagnostic>> {
+    let Some((provider_id, operation_id)) = parse_operation_reference(&query.operation.value) else {
+        return Err(vec![Diagnostic::error(
+            "UIKO2103",
+            format!(
+                "operation reference `{}` must be `integration.operationId`",
+                query.operation.value
+            ),
+            query.operation.span.clone(),
+        )]);
+    };
+
+    let Some(provider) = capabilities.providers.get(provider_id) else {
+        return Err(vec![Diagnostic::error(
+            "UIKO2102",
+            format!("unknown integration `{provider_id}`"),
+            query.operation.span.clone(),
+        )]);
+    };
+    let Some(operation) = provider.operations.get(operation_id) else {
+        return Err(vec![Diagnostic::error(
+            "UIKO2104",
+            format!("unknown operation `{operation_id}` on integration `{provider_id}`"),
+            query.operation.span.clone(),
+        )]);
+    };
+
+    let diagnostics = validate_query_input(query, operation, route_parameters, state);
+    if !diagnostics.is_empty() {
+        return Err(diagnostics);
+    }
+
+    let logical_id = format!(
+        "{module_id}.{}.query.{}",
+        page.id.value, query.id.value
+    );
+    let input = query
+        .input
+        .iter()
+        .filter_map(|binding| {
+            let required = operation
+                .parameters
+                .iter()
+                .find(|parameter| parameter.name == binding.value.name.value)
+                .map(|parameter| parameter.required)?;
+            Some(QueryInputIr {
+                name: binding.value.name.value.clone(),
+                expression: binding.value.expression.value.clone(),
+                required,
+            })
+        })
+        .collect();
+
+    Ok((
+        QueryIr {
+            id: logical_id,
+            alias: query.id.value.clone(),
+            provider_id: provider_id.to_string(),
+            external_operation_id: operation_id.to_string(),
+            input,
+            output: operation.output.clone(),
+        },
+        operation,
+    ))
 }
 
 fn validate_query_input(
