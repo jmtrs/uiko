@@ -13,6 +13,7 @@ version = "0.0.1"
 dependencies = [
  "uiko-compiler",
  "uiko-core",
+ "uiko-manifest",
  "uiko-project",
 ]
 
@@ -27,6 +28,13 @@ dependencies = [
 [[package]]
 name = "uiko-core"
 version = "0.0.1"
+
+[[package]]
+name = "uiko-manifest"
+version = "0.0.1"
+dependencies = [
+ "uiko-core",
+]
 
 [[package]]
 name = "uiko-project"
