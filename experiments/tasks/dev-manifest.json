@@ -1,5 +1,93 @@
 {
-  "schemaVersion": 1,
-  "status": "draft-before-pre-registration",
-  "tasks": []
+  "schemaVersion": 2,
+  "status": "frozen-g0-v1",
+  "frozenAt": "2026-09-18",
+  "contract": "experiments/fixtures/g0-support-api.openapi.json",
+  "taskIsolation": "Each task starts from a fresh arm-specific frozen base revision. Tasks are not cumulative.",
+  "primaryArms": ["B_FULL", "C_UIKO"],
+  "mechanismProbes": {
+    "R_RENDER_ONLY": "Direct json-render composition with conventional TypeScript routing/query/application plumbing.",
+    "T_AUTHORING": "Minimal TypeScript object/spec facade lowering to the same uiko semantic source DTO."
+  },
+  "tasks": [
+    {
+      "id": "G0-D01",
+      "title": "Customer directory",
+      "prompt": "Add a customer directory at /customers. Load customers from the provided OpenAPI operation listCustomers and render Name, Email and Status in a table. A loading state must be visible while the request is pending.",
+      "expectedRepairPressure": ["WIRING"],
+      "acceptance": [
+        "Navigating to /customers triggers listCustomers exactly once for the initial render.",
+        "The rendered table contains the fixture customer names, emails and statuses.",
+        "A loading indicator is present while the intercepted request is pending.",
+        "No hard-coded customer data is used."
+      ],
+      "probes": ["R_RENDER_ONLY", "T_AUTHORING"]
+    },
+    {
+      "id": "G0-D02",
+      "title": "Customer detail route",
+      "prompt": "Add a customer detail route at /customers/:customerId. Use the route parameter as the customerId path input for getCustomer and render the returned Name, Email and Status.",
+      "expectedRepairPressure": ["WIRING"],
+      "acceptance": [
+        "Navigating to /customers/cus_ada requests getCustomer with customerId=cus_ada.",
+        "The detail view renders the fixture customer's Name, Email and Status.",
+        "Changing the route to /customers/cus_lin requests the new customer and updates the view.",
+        "The route parameter is not duplicated as a hard-coded request value."
+      ],
+      "probes": ["R_RENDER_ONLY", "T_AUTHORING"]
+    },
+    {
+      "id": "G0-D03",
+      "title": "Status filter",
+      "prompt": "Add an All / Active / Inactive status filter to the customer directory. Active and Inactive must map to the optional status query parameter of listCustomers; All must omit the parameter.",
+      "expectedRepairPressure": ["WIRING"],
+      "acceptance": [
+        "The default All state omits the status query parameter.",
+        "Selecting Active issues listCustomers with status=active and updates the rows.",
+        "Selecting Inactive issues listCustomers with status=inactive and updates the rows.",
+        "Changing the filter does not require a full page reload."
+      ],
+      "probes": []
+    },
+    {
+      "id": "G0-D04",
+      "title": "Nested and nullable customer fields",
+      "prompt": "Extend the customer detail view with Organization and Phone. Organization must use organization.name. If phone is null, display Not provided instead of crashing or rendering the string null.",
+      "expectedRepairPressure": ["LOCAL", "COHERENCE"],
+      "acceptance": [
+        "Organization renders from organization.name.",
+        "A non-null phone is rendered verbatim.",
+        "A null phone renders Not provided.",
+        "The view remains valid for both fixture customers without unchecked nested-field failures."
+      ],
+      "probes": []
+    },
+    {
+      "id": "G0-D05",
+      "title": "Customer pagination",
+      "prompt": "Paginate the customer directory using the page query parameter from listCustomers and the response fields page, pageSize and total. Provide Previous and Next controls and preserve the current status filter when the page changes.",
+      "expectedRepairPressure": ["WIRING", "COHERENCE"],
+      "acceptance": [
+        "The first request uses page=1.",
+        "Next requests page=2 while preserving any selected status parameter.",
+        "Previous returns to page=1.",
+        "Previous is disabled on page 1.",
+        "Next is disabled when page * pageSize is greater than or equal to total."
+      ],
+      "probes": ["R_RENDER_ONLY", "T_AUTHORING"]
+    },
+    {
+      "id": "G0-D06",
+      "title": "Related customer orders",
+      "prompt": "On the customer detail route, add an Orders section backed by listCustomerOrders. Reuse the current customerId route parameter for the orders request and render Order, Status and Total for each returned order.",
+      "expectedRepairPressure": ["WIRING", "COHERENCE"],
+      "acceptance": [
+        "On /customers/cus_ada, both getCustomer and listCustomerOrders receive customerId=cus_ada.",
+        "Changing to /customers/cus_lin updates both requests to cus_lin.",
+        "The orders table projects the response items rather than the response envelope.",
+        "Order id, status and total are visible for each fixture order."
+      ],
+      "probes": []
+    }
+  ]
 }
