@@ -76,26 +76,42 @@
       "harnessOwnedReadOnly": [
         "experiments/fixtures/**",
         "experiments/tasks/**",
-        "experiments/g0/**"
+        "experiments/g0/**",
+        "experiments/controls/r-render-only/package.json",
+        "experiments/controls/r-render-only/README.md",
+        "experiments/controls/r-render-only/index.html",
+        "experiments/controls/r-render-only/tsconfig.json",
+        "experiments/controls/r-render-only/vite.config.ts"
       ],
       "coreOwned": []
     },
     "T_AUTHORING": {
       "applicationOwned": [
-        "experiments/controls/t-authoring/**/*.ts"
+        "experiments/controls/t-authoring/src/**/*.ts"
       ],
       "generated": [
-        "target/**",
-        "**/generated/**"
+        "experiments/controls/t-authoring/generated/**",
+        "experiments/controls/t-authoring/package-lock.json",
+        "experiments/controls/t-authoring/node_modules/**",
+        "target/**"
       ],
       "harnessOwnedReadOnly": [
         "experiments/fixtures/**",
         "experiments/tasks/**",
-        "experiments/g0/**"
+        "experiments/g0/**",
+        "experiments/controls/t-authoring/package.json",
+        "experiments/controls/t-authoring/README.md",
+        "experiments/controls/t-authoring/tsconfig.json",
+        "experiments/controls/t-authoring/tsconfig.emit.json",
+        "experiments/controls/t-authoring/harness/**"
       ],
       "coreOwned": [
         "crates/**",
-        "docs/**"
+        "docs/**",
+        "hosts/**",
+        "Cargo.toml",
+        "Cargo.lock",
+        "rust-toolchain.toml"
       ]
     }
   },
