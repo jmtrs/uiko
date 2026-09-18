@@ -9,5 +9,10 @@ license.workspace = true
 name = "uiko"
 path = "src/main.rs"
 
+[dependencies]
+uiko-compiler = { path = "../uiko-compiler" }
+uiko-core = { path = "../uiko-core" }
+uiko-project = { path = "../uiko-project" }
+
 [lints]
 workspace = true
