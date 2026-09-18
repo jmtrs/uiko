@@ -10,7 +10,8 @@ use std::{
 use uiko_g0_runner::{aggregate_run, append_event};
 
 fn main() -> ExitCode {
-    match run(std::env::args().skip(1).collect()) {
+    let args: Vec<_> = std::env::args().skip(1).collect();
+    match run(&args) {
         Ok(()) => ExitCode::SUCCESS,
         Err(message) => {
             eprintln!("G0 instrumentation error: {message}");
@@ -19,7 +20,7 @@ fn main() -> ExitCode {
     }
 }
 
-fn run(args: Vec<String>) -> Result<(), String> {
+fn run(args: &[String]) -> Result<(), String> {
     let Some(command) = args.first().map(String::as_str) else {
         return Err(help());
     };
