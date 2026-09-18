@@ -12,14 +12,14 @@ use uiko_core::{Diagnostic, SourceId, TextSpan};
 
 const ADAPTER_ID: &str = "uiko.openapi-http";
 
-/// Import the supported OpenAPI 3.1 read-only subset into uiko-owned capability semantics.
+/// Import the supported `OpenAPI` 3.1 read-only subset into uiko-owned capability semantics.
 ///
 /// Parsing is delegated to `oas3`; this strict visitor then accepts only the
 /// subset uiko knows how to reason about.
 ///
 /// # Errors
 ///
-/// Returns stable diagnostics for invalid OpenAPI documents or unsupported
+/// Returns stable diagnostics for invalid `OpenAPI` documents or unsupported
 /// constructs.
 pub fn import_openapi_provider(
     provider_id: &str,
