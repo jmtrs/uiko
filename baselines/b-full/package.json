@@ -9,8 +9,8 @@
   },
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
-    "typecheck": "tsc -b --pretty false",
+    "build": "tsc --noEmit --pretty false && vite build",
+    "typecheck": "tsc --noEmit --pretty false",
     "lint": "eslint .",
     "generate:api": "openapi-typescript ../../experiments/fixtures/g0-support-api.openapi.json -o src/api/generated/schema.d.ts",
     "test:e2e": "playwright test"
