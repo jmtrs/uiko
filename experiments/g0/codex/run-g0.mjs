@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -56,6 +57,7 @@ async function main() {
   );
   await mkdir(resultsDir, { recursive: true });
   await ensureAbsent(worktree);
+  await assertFrozenSetupSnapshots(sourceRepo, experimentLock);
 
   addWorktree(sourceRepo, worktree, experimentLock.harnessRevision);
 
@@ -69,6 +71,7 @@ async function main() {
       arm,
       taskId,
       prerequisiteManifest,
+      frozenSetupRoot: resolve(sourceRepo, "experiments/g0/frozen-setup"),
     });
     const expectedBase = experimentLock.taskBases?.[arm]?.[taskId];
     if (expectedBase !== prepared.baseRevision) {
@@ -337,6 +340,35 @@ function validateExperimentLock(lock, adapterLock, arm, taskId) {
   }
   if (typeof lock.taskBases?.[arm]?.[taskId] !== "string") {
     throw new Error(`experiment lock has no task base for ${arm}/${taskId}`);
+  }
+  if (
+    lock.setupSnapshots === null ||
+    typeof lock.setupSnapshots !== "object" ||
+    Array.isArray(lock.setupSnapshots) ||
+    Object.keys(lock.setupSnapshots).length === 0
+  ) {
+    throw new Error("experiment lock must contain frozen setup snapshots");
+  }
+}
+
+async function assertFrozenSetupSnapshots(sourceRepo, lock) {
+  for (const [logicalPath, snapshot] of Object.entries(lock.setupSnapshots)) {
+    if (
+      snapshot === null ||
+      typeof snapshot !== "object" ||
+      typeof snapshot.path !== "string" ||
+      typeof snapshot.sha256 !== "string" ||
+      !snapshot.path.startsWith("experiments/g0/frozen-setup/")
+    ) {
+      throw new Error(`invalid frozen setup snapshot metadata for ${logicalPath}`);
+    }
+    const bytes = await readFile(resolve(sourceRepo, snapshot.path));
+    const actual = createHash("sha256").update(bytes).digest("hex");
+    if (actual !== snapshot.sha256) {
+      throw new Error(
+        `frozen setup snapshot hash mismatch for ${logicalPath}: expected ${snapshot.sha256}, got ${actual}`,
+      );
+    }
   }
 }
 
