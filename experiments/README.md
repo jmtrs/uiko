@@ -2,6 +2,10 @@
 
 This directory is part of the product, not benchmark decoration.
 
+> G0 status: **GO at pilot grade** (2026-09-18, ADR 0004). Evidence:
+> `g0/results/pilot-2026-09-18/`. The frozen definitions below were not
+> modified; no experiment lock was created.
+
 ## G0 freeze
 
 The first G0 experiment definition is frozen as `g0-v1`:

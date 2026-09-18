@@ -1,6 +1,6 @@
 # G0 Codex execution adapter
 
-This directory contains the coding-agent adapter used for measured G0 runs.
+This directory contains the reference adapter for measured G0 runs. No measured run has used it: G0 was resolved by the 2026-09-18 manual pilot (ADR 0004), so this adapter is preserved as the working blueprint if the protocol-grade path is ever revived.
 
 ## Frozen harness
 
