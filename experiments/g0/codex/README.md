@@ -60,6 +60,9 @@ The freezer:
 - runs predecessor acceptance preflight for every non-empty prerequisite edge;
 - fingerprints Codex, Node, npm, Rust and Chromium;
 - reconstructs every applicable task execution base and records its exact SHA;
+- freezes the exact npm lockfiles under `experiments/g0/frozen-setup/`;
+- reconstructs every base a second time with `npm ci` from those snapshots and requires identical SHAs;
+- records SHA-256 for every frozen setup snapshot;
 - writes `experiments/g0/experiment-lock.json`.
 
 Commit the generated lock before the first measured run. Its `harnessRevision` intentionally points to the preceding code revision, so the lock commit itself cannot change the measured harness.
