@@ -392,7 +392,7 @@ mod tests {
 
     use super::import_openapi_provider;
 
-    const CONTRACT: &str = r#"{
+    const CONTRACT: &str = r##"{
       "openapi":"3.1.0",
       "info":{"title":"test","version":"1"},
       "paths":{
@@ -428,7 +428,7 @@ mod tests {
           }
         }
       }
-    }"#;
+    }"##;
 
     #[test]
     fn imports_get_operation_into_protocol_neutral_shape() {
