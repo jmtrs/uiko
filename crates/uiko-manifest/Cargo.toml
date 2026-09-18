@@ -8,5 +8,8 @@ license.workspace = true
 [dependencies]
 uiko-core = { path = "../uiko-core" }
 
+[dev-dependencies]
+uiko-capabilities = { path = "../uiko-capabilities" }
+
 [lints]
 workspace = true
