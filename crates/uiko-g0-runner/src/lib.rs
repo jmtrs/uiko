@@ -495,6 +495,7 @@ fn load_classifier(
     PathClassifier::from_policy(repo_root, &policy, arm)
 }
 
+#[derive(Clone, Copy, Debug)]
 struct FinalMeasurements {
     accepted_change_tokens: u64,
     changed_bytes: u64,
@@ -1114,10 +1115,7 @@ pub fn inserted_token_count(before: &str, after: &str) -> usize {
     if after_tokens.len() >= before_tokens.len() {
         (distance + after_tokens.len() - before_tokens.len()) / 2
     } else {
-        distance
-            .checked_sub(before_tokens.len() - after_tokens.len())
-            .unwrap_or(0)
-            / 2
+        distance.saturating_sub(before_tokens.len() - after_tokens.len()) / 2
     }
 }
 
