@@ -16,9 +16,9 @@ const { values } = parseArgs({
     repo: { type: "string", default: defaultRepoRoot },
     output: { type: "string" },
     codex: { type: "string", default: "codex" },
-    model: { type: "string", default: "gpt-6-astra" },
+    model: { type: "string" },
     "model-version": { type: "string" },
-    "reasoning-effort": { type: "string", default: "high" },
+    "reasoning-effort": { type: "string" },
   },
 });
 
