@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -6,6 +7,13 @@ import { parseArgs } from "node:util";
 
 import { inspectEnvironment } from "./environment.mjs";
 import { prepareExecutionBase } from "./prepare-base.mjs";
+
+const REQUIRED_NPM_LOCKS = [
+  "experiments/g0/harness/package-lock.json",
+  "baselines/b-full/package-lock.json",
+  "hosts/vue/package-lock.json",
+  "experiments/controls/r-render-only/package-lock.json",
+];
 
 const { values } = parseArgs({
   options: {
@@ -52,7 +60,8 @@ runPrerequisitePreflight(sourceRepo);
 let environment = null;
 const taskBases = {};
 const baseInputs = {};
-const root = await mkdtemp(join(tmpdir(), "uiko-g0-lock-"));
+const npmLocks = new Map();
+const generationRoot = await mkdtemp(join(tmpdir(), "uiko-g0-lock-generation-"));
 
 try {
   for (const arm of applicableArms(taskManifest)) {
@@ -60,7 +69,7 @@ try {
     baseInputs[arm] = {};
 
     for (const task of applicableTasks(taskManifest, arm)) {
-      const worktree = join(root, `${arm}-${task.id}`);
+      const worktree = join(generationRoot, `${arm}-${task.id}`);
       addWorktree(sourceRepo, worktree, harnessRevision);
 
       try {
@@ -70,11 +79,13 @@ try {
           taskId: task.id,
           prerequisiteManifest,
         });
+
         if (environment === null) {
           environment = await inspectEnvironment(worktree, values.codex);
           assertFrozenEnvironment(environment, adapterLock, harnessPackage);
         }
 
+        await captureNpmLocks(worktree, prepared.stagedSetupPaths, npmLocks);
         taskBases[arm][task.id] = prepared.baseRevision;
         baseInputs[arm][task.id] = {
           prerequisiteRevision: prepared.prerequisiteRevision,
@@ -86,12 +97,50 @@ try {
     }
   }
 } finally {
-  await rm(root, { recursive: true, force: true });
+  await rm(generationRoot, { recursive: true, force: true });
 }
 
 if (environment === null) {
   throw new Error("no applicable G0 task bases were produced");
 }
+for (const path of REQUIRED_NPM_LOCKS) {
+  if (!npmLocks.has(path)) {
+    throw new Error(`freezer did not capture required npm lock ${path}`);
+  }
+}
+
+const verificationSnapshots = await mkdtemp(
+  join(tmpdir(), "uiko-g0-frozen-setup-"),
+);
+try {
+  await writeSetupSnapshots(verificationSnapshots, npmLocks);
+  await verifyFrozenTaskBases({
+    sourceRepo,
+    harnessRevision,
+    prerequisiteManifest,
+    taskManifest,
+    expectedTaskBases: taskBases,
+    frozenSetupRoot: verificationSnapshots,
+  });
+} finally {
+  await rm(verificationSnapshots, { recursive: true, force: true });
+}
+
+const frozenSetupRoot = join(sourceRepo, "experiments/g0/frozen-setup");
+await rm(frozenSetupRoot, { recursive: true, force: true });
+await writeSetupSnapshots(frozenSetupRoot, npmLocks);
+
+const setupSnapshots = Object.fromEntries(
+  [...npmLocks.entries()]
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([path, bytes]) => [
+      path,
+      {
+        path: `experiments/g0/frozen-setup/${path}`,
+        sha256: sha256(bytes),
+      },
+    ]),
+);
 
 const lock = {
   schemaVersion: 1,
@@ -117,6 +166,7 @@ const lock = {
   },
   taskBases,
   baseInputs,
+  setupSnapshots,
   prerequisitePreflight: {
     status: "passed",
     harnessRevision,
@@ -126,6 +176,65 @@ const lock = {
 await mkdir(dirname(output), { recursive: true });
 await writeFile(output, `${JSON.stringify(lock, null, 2)}\n`, "utf8");
 process.stdout.write(`${output}\n`);
+
+async function captureNpmLocks(worktree, stagedPaths, snapshots) {
+  for (const path of stagedPaths.filter((candidate) =>
+    candidate.endsWith("package-lock.json"),
+  )) {
+    const bytes = await readFile(join(worktree, path));
+    const existing = snapshots.get(path);
+    if (existing !== undefined && !existing.equals(bytes)) {
+      throw new Error(`npm lock changed across execution bases: ${path}`);
+    }
+    snapshots.set(path, bytes);
+  }
+}
+
+async function writeSetupSnapshots(root, snapshots) {
+  for (const [path, bytes] of snapshots) {
+    const destination = join(root, path);
+    await mkdir(dirname(destination), { recursive: true });
+    await writeFile(destination, bytes);
+  }
+}
+
+async function verifyFrozenTaskBases({
+  sourceRepo,
+  harnessRevision,
+  prerequisiteManifest,
+  taskManifest,
+  expectedTaskBases,
+  frozenSetupRoot,
+}) {
+  const root = await mkdtemp(join(tmpdir(), "uiko-g0-lock-verification-"));
+  try {
+    for (const arm of applicableArms(taskManifest)) {
+      for (const task of applicableTasks(taskManifest, arm)) {
+        const worktree = join(root, `${arm}-${task.id}`);
+        addWorktree(sourceRepo, worktree, harnessRevision);
+        try {
+          const prepared = prepareExecutionBase({
+            repoRoot: worktree,
+            arm,
+            taskId: task.id,
+            prerequisiteManifest,
+            frozenSetupRoot,
+          });
+          const expected = expectedTaskBases[arm][task.id];
+          if (prepared.baseRevision !== expected) {
+            throw new Error(
+              `frozen setup cannot reproduce ${arm}/${task.id}: expected ${expected}, got ${prepared.baseRevision}`,
+            );
+          }
+        } finally {
+          removeWorktree(sourceRepo, worktree);
+        }
+      }
+    }
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+}
 
 function assertFrozenEnvironment(actual, adapterLock, harnessPackage) {
   const expectedNode = `v${harnessPackage.engines.node}`;
@@ -227,6 +336,10 @@ function capture(command, args, cwd) {
     );
   }
   return result.stdout;
+}
+
+function sha256(bytes) {
+  return createHash("sha256").update(bytes).digest("hex");
 }
 
 async function readJson(path) {
