@@ -212,8 +212,7 @@ fn lower_page(
     for component in &page.components {
         match &component.value.kind {
             ComponentKindSource::Text { .. } => {}
-            ComponentKindSource::Field { binding, .. }
-            | ComponentKindSource::Table { binding } => {
+            ComponentKindSource::Field { binding, .. } | ComponentKindSource::Table { binding } => {
                 validate_component_binding(
                     binding,
                     &query_aliases,
