@@ -80,36 +80,19 @@ impl UiManifest {
     pub fn to_json_pretty(&self) -> String {
         let mut output = String::new();
         writeln!(output, "{{").expect("writing to String cannot fail");
-        writeln!(
-            output,
-            "  \"specVersion\": {},",
-            self.spec_version
-        )
-        .expect("writing to String cannot fail");
-        writeln!(
-            output,
-            "  \"app\": \"{}\",",
-            json_escape(&self.app_name)
-        )
-        .expect("writing to String cannot fail");
+        writeln!(output, "  \"specVersion\": {},", self.spec_version)
+            .expect("writing to String cannot fail");
+        writeln!(output, "  \"app\": \"{}\",", json_escape(&self.app_name))
+            .expect("writing to String cannot fail");
         writeln!(output, "  \"routes\": [").expect("writing to String cannot fail");
 
         for (route_index, route) in self.routes.iter().enumerate() {
             writeln!(output, "    {{").expect("writing to String cannot fail");
-            writeln!(
-                output,
-                "      \"id\": \"{}\",",
-                json_escape(&route.id)
-            )
-            .expect("writing to String cannot fail");
-            writeln!(
-                output,
-                "      \"path\": \"{}\",",
-                json_escape(&route.path)
-            )
-            .expect("writing to String cannot fail");
-            writeln!(output, "      \"components\": [")
+            writeln!(output, "      \"id\": \"{}\",", json_escape(&route.id))
                 .expect("writing to String cannot fail");
+            writeln!(output, "      \"path\": \"{}\",", json_escape(&route.path))
+                .expect("writing to String cannot fail");
+            writeln!(output, "      \"components\": [").expect("writing to String cannot fail");
 
             for (component_index, component) in route.components.iter().enumerate() {
                 write_component(&mut output, component, 8);
@@ -135,12 +118,8 @@ impl UiManifest {
 
 fn write_component(output: &mut String, component: &UiComponentManifest, indent: usize) {
     let pad = " ".repeat(indent);
-    write!(
-        output,
-        "{pad}{{\"id\":\"{}\",",
-        json_escape(&component.id)
-    )
-    .expect("writing to String cannot fail");
+    write!(output, "{pad}{{\"id\":\"{}\",", json_escape(&component.id))
+        .expect("writing to String cannot fail");
 
     match &component.kind {
         UiComponentKind::Text { value } => {
