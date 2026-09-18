@@ -253,6 +253,8 @@ mod tests {
                     queries: vec![uiko_core::QueryIr {
                         id: "customers.CustomerDetail.query.customer".into(),
                         alias: "customer".into(),
+                        provider_id: "crm".into(),
+                        external_operation_id: "getCustomer".into(),
                         input: vec![uiko_core::QueryInputIr {
                             name: "customerId".into(),
                             expression: "route.customerId".into(),
