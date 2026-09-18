@@ -152,10 +152,7 @@ fn lower_page(
         let Some(operation) = provider.operations.get(operation_id) else {
             diagnostics.push(Diagnostic::error(
                 "UIKO2104",
-                format!(
-                    "unknown operation `{}` on integration `{provider_id}`",
-                    operation_id
-                ),
+                format!("unknown operation `{operation_id}` on integration `{provider_id}`"),
                 query.value.operation.span.clone(),
             ));
             continue;
