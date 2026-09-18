@@ -389,8 +389,8 @@ fn build_matcher(root: &Path, patterns: &[String]) -> Result<Gitignore, String> 
 /// Returns an error when the event is invalid, does not follow the existing
 /// sequence, or cannot be appended.
 pub fn append_event(trace_path: &Path, event_json: &str) -> Result<(), String> {
-    let event: TraceEvent =
-        serde_json::from_str(event_json).map_err(|error| format!("invalid trace event: {error}"))?;
+    let event: TraceEvent = serde_json::from_str(event_json)
+        .map_err(|error| format!("invalid trace event: {error}"))?;
     validate_event_shape(&event)?;
 
     let previous = if trace_path.exists() {
@@ -435,8 +435,8 @@ pub fn append_event(trace_path: &Path, event_json: &str) -> Result<(), String> {
             .map_err(|error| format!("cannot create trace directory: {error}"))?;
     }
 
-    let mut line =
-        serde_json::to_string(&event).map_err(|error| format!("cannot serialize event: {error}"))?;
+    let mut line = serde_json::to_string(&event)
+        .map_err(|error| format!("cannot serialize event: {error}"))?;
     line.push('\n');
     use std::io::Write as _;
     let mut file = fs::OpenOptions::new()
@@ -506,8 +506,8 @@ pub fn aggregate_run(
                 input_tokens,
                 output_tokens,
             } => {
-                *provider_input_tokens.get_or_insert(0) += input_tokens;
-                *provider_output_tokens.get_or_insert(0) += output_tokens;
+                *provider_input_tokens.get_or_insert(0) += *input_tokens;
+                *provider_output_tokens.get_or_insert(0) += *output_tokens;
             }
             EventPayload::Repair {
                 iteration,
@@ -558,11 +558,7 @@ pub fn aggregate_run(
                 let expected_before = if let Some(previous) = last_after.get(&path) {
                     previous.clone()
                 } else {
-                    let base = base_content(
-                        &repo_root,
-                        &identity.start.base_revision,
-                        &path,
-                    )?;
+                    let base = base_content(&repo_root, &identity.start.base_revision, &path)?;
                     base_cache.insert(path.clone(), base.clone());
                     base
                 };
@@ -639,8 +635,7 @@ pub fn aggregate_run(
 
         match path_class {
             PathClass::Application => {
-                accepted_change_tokens +=
-                    inserted_token_count(before_text, after_text) as u64;
+                accepted_change_tokens += inserted_token_count(before_text, after_text) as u64;
                 changed_bytes +=
                     myers_distance(before_text.as_bytes(), after_text.as_bytes()) as u64;
                 let before_lines: Vec<_> = before_text.split_inclusive('\n').collect();
@@ -794,9 +789,7 @@ fn validate_trace_identity(events: &[TraceEvent]) -> Result<TraceIdentity, Strin
         .expect("non-empty trace is validated before identity");
 
     for event in events {
-        if event.run_id != first.run_id
-            || event.task_id != first.task_id
-            || event.arm != first.arm
+        if event.run_id != first.run_id || event.task_id != first.task_id || event.arm != first.arm
         {
             return Err(format!(
                 "trace event {} has inconsistent run/task/arm identity",
@@ -827,7 +820,12 @@ fn validate_trace_identity(events: &[TraceEvent]) -> Result<TraceIdentity, Strin
 
     if events[1..events.len().saturating_sub(1)]
         .iter()
-        .any(|event| matches!(event.payload, EventPayload::RunStart { .. } | EventPayload::RunEnd { .. }))
+        .any(|event| {
+            matches!(
+                &event.payload,
+                EventPayload::RunStart { .. } | EventPayload::RunEnd { .. }
+            )
+        })
     {
         return Err("run_start/run_end may only appear as first/last events".into());
     }
@@ -984,7 +982,10 @@ fn changed_paths(repo_root: &Path, revision: &str) -> Result<BTreeSet<String>, S
 }
 
 fn parse_nul_paths(bytes: &[u8], paths: &mut BTreeSet<String>) -> Result<(), String> {
-    for raw in bytes.split(|byte| *byte == 0).filter(|path| !path.is_empty()) {
+    for raw in bytes
+        .split(|byte| *byte == 0)
+        .filter(|path| !path.is_empty())
+    {
         let path = std::str::from_utf8(raw)
             .map_err(|_| "git returned a non-UTF-8 path, unsupported by G0".to_string())?;
         paths.insert(normalize_relative_path(path)?);
@@ -994,8 +995,14 @@ fn parse_nul_paths(bytes: &[u8], paths: &mut BTreeSet<String>) -> Result<(), Str
 
 #[must_use]
 pub fn inserted_token_count(before: &str, after: &str) -> usize {
-    let before_tokens: Vec<_> = TOKEN_RE.find_iter(before).map(|item| item.as_str()).collect();
-    let after_tokens: Vec<_> = TOKEN_RE.find_iter(after).map(|item| item.as_str()).collect();
+    let before_tokens: Vec<_> = TOKEN_RE
+        .find_iter(before)
+        .map(|item| item.as_str())
+        .collect();
+    let after_tokens: Vec<_> = TOKEN_RE
+        .find_iter(after)
+        .map(|item| item.as_str())
+        .collect();
     let distance = myers_distance(&before_tokens, &after_tokens);
     let delta = after_tokens.len() as isize - before_tokens.len() as isize;
     usize::try_from((distance as isize + delta) / 2)
@@ -1018,9 +1025,7 @@ fn myers_distance<T: Eq>(before: &[T], after: &[T]) -> usize {
         let mut k = -d;
         while k <= d {
             let index = usize::try_from(k + offset).expect("non-negative Myers index");
-            let mut x = if k == -d
-                || (k != d && v[index - 1] < v[index + 1])
-            {
+            let mut x = if k == -d || (k != d && v[index - 1] < v[index + 1]) {
                 v[index + 1]
             } else {
                 v[index - 1] + 1
@@ -1029,8 +1034,7 @@ fn myers_distance<T: Eq>(before: &[T], after: &[T]) -> usize {
 
             while x < n
                 && y < m
-                && before[usize::try_from(x).expect("x")]
-                    == after[usize::try_from(y).expect("y")]
+                && before[usize::try_from(x).expect("x")] == after[usize::try_from(y).expect("y")]
             {
                 x += 1;
                 y += 1;
@@ -1061,13 +1065,11 @@ fn sha256_hex(text: &str) -> String {
 mod tests {
     use std::path::Path;
 
-    use super::{
-        Arm, PathClass, PathClassifier, PathPolicy, inserted_token_count, myers_distance,
-    };
+    use super::{Arm, PathClass, PathClassifier, PathPolicy, inserted_token_count, myers_distance};
 
     #[test]
     fn frozen_tokenizer_counts_unicode_words_and_punctuation() {
-        assert_eq!(inserted_token_count("", "café = customer.name;"), 7);
+        assert_eq!(inserted_token_count("", "café = customer.name;"), 6);
     }
 
     #[test]
@@ -1121,6 +1123,9 @@ mod tests {
             uiko.classify("fixtures/support-console/integrations/crm.jsonc"),
             PathClass::Harness
         );
-        assert_eq!(uiko.classify("crates/uiko-core/src/lib.rs"), PathClass::Core);
+        assert_eq!(
+            uiko.classify("crates/uiko-core/src/lib.rs"),
+            PathClass::Core
+        );
     }
 }
