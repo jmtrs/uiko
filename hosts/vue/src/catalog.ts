@@ -24,15 +24,17 @@ export const catalog = defineCatalog(schema, {
         uikoId: z.string(),
         label: z.string(),
         binding: z.string(),
+        value: z.unknown(),
       }),
-      description: "Label plus a compiled data binding. Data resolution arrives in the OpenAPI read slice.",
+      description: "Label plus a value resolved from a compiled logical query.",
     },
     Table: {
       props: z.object({
         uikoId: z.string(),
         binding: z.string(),
+        rows: z.array(z.unknown()),
       }),
-      description: "Compiled list binding shell. Projection and pagination arrive in the OpenAPI read slice.",
+      description: "Generic table over a compiled list binding.",
     },
   },
   actions: {},
@@ -68,19 +70,73 @@ export const { registry } = defineRegistry(catalog, {
         },
         [
           h("strong", null, props.label),
-          h("span", { "aria-live": "polite" }, ""),
+          h("span", { "aria-live": "polite" }, formatValue(props.value)),
         ],
       ),
-    Table: ({ props }) =>
-      h(
-        "table",
-        {
-          "data-uiko-id": props.uikoId,
-          "data-uiko-kind": "Table",
-          "data-uiko-binding": props.binding,
-          "aria-label": props.binding,
-        },
-        [h("tbody")],
-      ),
+    Table: ({ props }) => renderTable(props.uikoId, props.binding, props.rows),
   },
 });
+
+function renderTable(
+  uikoId: string,
+  binding: string,
+  rows: unknown[],
+): ReturnType<typeof h> {
+  const records = rows.filter(isRecord);
+  const columns = Array.from(
+    new Set(records.flatMap((row) => Object.keys(row))),
+  );
+
+  return h(
+    "table",
+    {
+      "data-uiko-id": uikoId,
+      "data-uiko-kind": "Table",
+      "data-uiko-binding": binding,
+      "aria-label": binding,
+    },
+    [
+      h(
+        "thead",
+        null,
+        h(
+          "tr",
+          null,
+          columns.map((column) => h("th", { scope: "col" }, column)),
+        ),
+      ),
+      h(
+        "tbody",
+        null,
+        records.map((row) =>
+          h(
+            "tr",
+            null,
+            columns.map((column) => h("td", null, formatValue(row[column]))),
+          ),
+        ),
+      ),
+    ],
+  );
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function formatValue(value: unknown): string {
+  if (value === null || value === undefined) {
+    return "";
+  }
+  if (typeof value === "string") {
+    return value;
+  }
+  if (
+    typeof value === "number" ||
+    typeof value === "boolean" ||
+    typeof value === "bigint"
+  ) {
+    return String(value);
+  }
+  return JSON.stringify(value);
+}
