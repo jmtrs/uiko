@@ -1,0 +1,1 @@
+Add a customer directory at /customers. Load customers from the provided OpenAPI operation listCustomers and render Name, Email and Status in a table. A loading state must be visible while the request is pending.

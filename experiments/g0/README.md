@@ -1,5 +1,14 @@
 # G0 local experiment
 
+> **Status (2026-09-18): pilot GO.** A manual paired pilot of G0-D01
+> (B_FULL vs C_UIKO, Claude Code on `glm-5.2[1m]`) passed acceptance on
+> both arms and showed the expected authoring reduction. Decision:
+> [ADR 0004](../../docs/adr/0004-g0-pilot-go.md), evidence:
+> [`results/pilot-2026-09-18/`](./results/pilot-2026-09-18/README.md).
+> No experiment lock was created and no measured (protocol §9) run has
+> been executed; the workflow below remains the route if that is ever
+> needed.
+
 G0 is intentionally independent from any one coding agent.
 
 The frozen core is shared by every run:

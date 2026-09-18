@@ -1,0 +1,57 @@
+{
+  "schemaVersion": "pilot-1",
+  "runId": "pilot-G0-D01-C_UIKO",
+  "arm": "C_UIKO",
+  "taskId": "G0-D01",
+  "harnessRevision": "b6ba3ff5ddcc509ce3b4fac4b9936bfaf05fb09d",
+  "baseRevision": "f110be5d57eeaa9e381ff840cb60bc247fa9a42c",
+  "agent": {
+    "tool": "claude-code/2.1.198 (bare, stream-json)",
+    "model": "glm-5.2[1m]",
+    "observedModels": [
+      "glm-5.2"
+    ],
+    "exitCode": 0,
+    "timedOut": false,
+    "resultSubtype": "success",
+    "numTurns": 63,
+    "usage": {
+      "inputTokens": 128065,
+      "outputTokens": 13767,
+      "cacheRead": 1875584
+    },
+    "parseErrors": 0
+  },
+  "acceptance": {
+    "exitCode": 0,
+    "accepted": true
+  },
+  "agentWallMs": 352109,
+  "files": [
+    {
+      "file": "Cargo.lock",
+      "cls": "other",
+      "added": 2,
+      "deleted": 0
+    },
+    {
+      "file": "fixtures/support-console/uiko.jsonc",
+      "cls": "application",
+      "added": 2,
+      "deleted": 2
+    },
+    {
+      "file": "fixtures/support-console/features/customers/list.jsonc",
+      "cls": "application",
+      "added": 15,
+      "deleted": 0
+    },
+    {
+      "file": "fixtures/support-console/features/customers/module.jsonc",
+      "cls": "application",
+      "added": 5,
+      "deleted": 0
+    }
+  ],
+  "appAddedTokens": 161
+}

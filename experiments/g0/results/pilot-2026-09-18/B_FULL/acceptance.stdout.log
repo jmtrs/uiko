@@ -1,0 +1,37 @@
+g0 fixture listening on http://127.0.0.1:4317
+
+> @uiko-experiment/b-full@0.0.0 dev
+> vite --host 127.0.0.1 --port 4318 --strictPort
+
+
+  VITE v7.3.6  ready in 129 ms
+
+  ➜  Local:   http://127.0.0.1:4318/
+{
+  "taskId": "G0-D01",
+  "arm": "B_FULL",
+  "success": true,
+  "fatalError": null,
+  "criteria": [
+    {
+      "index": 0,
+      "passed": true,
+      "evidence": "initial render issues listCustomers exactly once"
+    },
+    {
+      "index": 1,
+      "passed": true,
+      "evidence": "table renders fixture names, emails and statuses"
+    },
+    {
+      "index": 2,
+      "passed": true,
+      "evidence": "loading indicator is visible while listCustomers is pending"
+    },
+    {
+      "index": 3,
+      "passed": true,
+      "evidence": "customer fixture values are not hard-coded in measured sources"
+    }
+  ]
+}

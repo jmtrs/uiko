@@ -1,0 +1,102 @@
+diff --git a/baselines/b-full/src/app/App.tsx b/baselines/b-full/src/app/App.tsx
+index d91cb70..9e2025b 100644
+--- a/baselines/b-full/src/app/App.tsx
++++ b/baselines/b-full/src/app/App.tsx
+@@ -1,4 +1,7 @@
+ import { Container, Typography } from "@mui/material";
++import { Route, Routes } from "react-router-dom";
++
++import { CustomerListPage } from "../features/customers/CustomerListPage";
+ 
+ export function App() {
+   return (
+@@ -6,6 +9,9 @@ export function App() {
+       <Typography component="h1" variant="h4">
+         Support Console
+       </Typography>
++      <Routes>
++        <Route path="/customers" element={<CustomerListPage />} />
++      </Routes>
+     </Container>
+   );
+ }
+diff --git a/baselines/b-full/src/features/customers/CustomerListPage.tsx b/baselines/b-full/src/features/customers/CustomerListPage.tsx
+new file mode 100644
+index 0000000..e0a4471
+--- /dev/null
++++ b/baselines/b-full/src/features/customers/CustomerListPage.tsx
+@@ -0,0 +1,74 @@
++import { useQuery } from "@tanstack/react-query";
++import {
++  Alert,
++  CircularProgress,
++  Paper,
++  Stack,
++  Table,
++  TableBody,
++  TableCell,
++  TableContainer,
++  TableHead,
++  TableRow,
++  Typography,
++} from "@mui/material";
++
++import { api } from "../../api/client";
++import type { components } from "../../api/generated/schema";
++
++type CustomerPage = components["schemas"]["CustomerPage"];
++
++export function CustomerListPage() {
++  const customers = useQuery({
++    queryKey: ["customers"],
++    queryFn: listCustomers,
++  });
++
++  if (customers.isPending) {
++    return (
++      <Stack alignItems="center" sx={{ py: 6 }}>
++        <CircularProgress aria-label="Loading customers" />
++      </Stack>
++    );
++  }
++
++  if (customers.isError) {
++    return <Alert severity="error">Failed to load customers.</Alert>;
++  }
++
++  return (
++    <section>
++      <Typography component="h2" variant="h6" gutterBottom>
++        Customers
++      </Typography>
++      <TableContainer component={Paper}>
++        <Table>
++          <TableHead>
++            <TableRow>
++              <TableCell>Name</TableCell>
++              <TableCell>Email</TableCell>
++              <TableCell>Status</TableCell>
++            </TableRow>
++          </TableHead>
++          <TableBody>
++            {customers.data.items.map((customer) => (
++              <TableRow key={customer.id}>
++                <TableCell>{customer.name}</TableCell>
++                <TableCell>{customer.email}</TableCell>
++                <TableCell>{customer.status}</TableCell>
++              </TableRow>
++            ))}
++          </TableBody>
++        </Table>
++      </TableContainer>
++    </section>
++  );
++}
++
++async function listCustomers(): Promise<CustomerPage> {
++  const { data, error } = await api.GET("/customers");
++  if (error) {
++    throw new Error("Failed to load customers.");
++  }
++  return data;
++}
