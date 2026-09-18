@@ -1,0 +1,91 @@
+name: freeze-g0-experiment
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/g0-freeze.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  freeze:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    env:
+      G0_PROVIDER: openai
+      G0_MODEL: gpt-5.6-sol
+      G0_MODEL_VERSION: gpt-5.6-sol
+      G0_REASONING_EFFORT: xhigh
+      G0_LOCK_BRANCH: chore/g0-experiment-lock-v1
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.21.0
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Install frozen npm and Codex CLI
+        run: |
+          npm install --global npm@11.19.0
+          test "$(npm --version)" = "11.19.0"
+          npm install --global @openai/codex@0.155.0
+          codex --version | grep -F "0.155.0"
+
+      - name: Install Chromium system prerequisites
+        working-directory: experiments/g0/harness
+        run: |
+          npm install --ignore-scripts --no-audit --no-fund
+          npx playwright install --with-deps chromium
+          rm -f package-lock.json
+
+      - name: Source checkout remains clean
+        run: test -z "$(git status --porcelain --untracked-files=all)"
+
+      - name: Freeze G0 environment and task bases
+        run: |
+          node experiments/g0/codex/freeze-experiment.mjs             --repo .             --provider "$G0_PROVIDER"             --model "$G0_MODEL"             --model-version "$G0_MODEL_VERSION"             --reasoning-effort "$G0_REASONING_EFFORT"
+
+      - name: Validate generated lock scope
+        run: |
+          test -f experiments/g0/experiment-lock.json
+          test -d experiments/g0/frozen-setup
+          jq -e '
+            .schemaVersion == 1
+            and .status == "frozen-g0-v1"
+            and .harnessRevision == env.GITHUB_SHA
+            and .agent.provider == env.G0_PROVIDER
+            and .agent.model == env.G0_MODEL
+            and .agent.modelVersion == env.G0_MODEL_VERSION
+            and .agent.reasoningEffort == env.G0_REASONING_EFFORT
+            and .agent.codexCliVersion == "0.155.0"
+            and .prerequisitePreflight.status == "passed"
+            and (.taskBases.B_FULL | length == 6)
+            and (.taskBases.C_UIKO | length == 6)
+            and (.taskBases.R_RENDER_ONLY | length == 3)
+            and (.taskBases.T_AUTHORING | length == 3)
+            and (.setupSnapshots | length == 4)
+          ' experiments/g0/experiment-lock.json > /dev/null
+          unexpected="$(
+            git status --porcelain --untracked-files=all |
+              awk '{print $2}' |
+              grep -v '^experiments/g0/experiment-lock.json$' |
+              grep -v '^experiments/g0/frozen-setup/' || true
+          )"
+          test -z "$unexpected"
+
+      - name: Commit lock on dedicated branch
+        run: |
+          git config user.name "uiko G0 freezer"
+          git config user.email "g0@uiko.invalid"
+          git switch -c "$G0_LOCK_BRANCH"
+          git add -f experiments/g0/experiment-lock.json experiments/g0/frozen-setup
+          test -n "$(git diff --cached --name-only)"
+          git commit -m "chore: freeze G0 experiment lock"
+          git push --force origin "HEAD:refs/heads/$G0_LOCK_BRANCH"
