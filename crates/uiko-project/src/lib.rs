@@ -77,14 +77,14 @@ fn load_module(
     let mut pages = Vec::with_capacity(module_config.value.pages.len());
     let mut diagnostics = Vec::new();
     for page_ref in &module_config.value.pages {
-        let page_path = match resolve_reference(root, module_dir, &page_ref.value, None, &page_ref.span)
-        {
-            Ok(path) => path,
-            Err(errors) => {
-                diagnostics.extend(errors);
-                continue;
-            }
-        };
+        let page_path =
+            match resolve_reference(root, module_dir, &page_ref.value, None, &page_ref.span) {
+                Ok(path) => path,
+                Err(errors) => {
+                    diagnostics.extend(errors);
+                    continue;
+                }
+            };
         let page_text = match read_referenced_source(root, &page_path, &page_ref.span) {
             Ok(text) => text,
             Err(errors) => {
