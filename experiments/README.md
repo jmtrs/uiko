@@ -10,6 +10,8 @@ The first G0 experiment definition is frozen as `g0-v1`:
 - `g0/path-policy.json` — authored-source, exclusion and tokenization rules;
 - `g0/repair-classification.md` — LOCAL / WIRING / COHERENCE / VISUAL_FIT / ENVIRONMENT;
 - `g0/run-result.schema.json` — arm-neutral result format;
+- `g0/trace-event.schema.json` — arm-neutral append-only event format;
+- `g0/instrumentation.md` — trace/aggregation contract;
 - `g0/run-template.json` — result skeleton;
 - `tasks/dev-manifest.json` — six pre-registered G0 development tasks;
 - `fixtures/g0-support-api.openapi.json` — shared read-only API contract;
