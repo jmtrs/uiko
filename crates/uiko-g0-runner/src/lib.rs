@@ -470,7 +470,7 @@ pub fn aggregate_run(
     let base_revision = identity.start.base_revision.clone();
     verify_git_revision(&repo_root, &base_revision)?;
 
-    let mut state = AggregationState::new(&repo_root, &base_revision, &classifier);
+    let mut state = AggregationState::new(&repo_root, base_revision, &classifier);
     for event in &events {
         state.process_event(event)?;
     }
