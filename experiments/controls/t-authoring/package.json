@@ -1,0 +1,17 @@
+{
+  "name": "@uiko-experiment/t-authoring",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "packageManager": "npm@11.19.0",
+  "engines": { "node": "24.21.0" },
+  "scripts": {
+    "typecheck": "tsc --noEmit --pretty false",
+    "emit": "tsc -p tsconfig.emit.json --pretty false",
+    "lower": "node harness/lower.mjs",
+    "build": "npm run typecheck && npm run emit && npm run lower && cargo run --quiet --manifest-path ../../../Cargo.toml -p uiko-cli -- build generated/project --ui-manifest generated/app.uiko-manifest.json"
+  },
+  "devDependencies": {
+    "typescript": "6.0.3"
+  }
+}
