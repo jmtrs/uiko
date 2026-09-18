@@ -203,7 +203,7 @@ async function main() {
         resultsDir,
         turnName,
       );
-      const acceptance = runAcceptance({
+      const acceptance = await runAcceptance({
         repoRoot: worktree,
         arm,
         taskId,
@@ -340,7 +340,7 @@ function validateExperimentLock(lock, adapterLock, arm, taskId) {
   }
 }
 
-function runAcceptance({
+async function runAcceptance({
   repoRoot,
   arm,
   taskId,
@@ -367,20 +367,16 @@ function runAcceptance({
       maxBuffer: 16 * 1024 * 1024,
     },
   );
-  return writeAcceptanceLogs(result, stdoutPath, stderrPath);
-}
-
-function writeAcceptanceLogs(result, stdoutPath, stderrPath) {
   const stdout = result.stdout ?? "";
   const stderr = result.stderr ?? "";
+  await Promise.all([
+    writeFile(stdoutPath, stdout, "utf8"),
+    writeFile(stderrPath, stderr, "utf8"),
+  ]);
   return {
     status: result.status ?? 1,
     stdout,
     stderr,
-    logPromise: Promise.all([
-      writeFile(stdoutPath, stdout, "utf8"),
-      writeFile(stderrPath, stderr, "utf8"),
-    ]),
   };
 }
 
