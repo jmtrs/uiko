@@ -214,8 +214,10 @@ fn import_parameters(operation: &Map<String, Value>) -> Result<Vec<OperationPara
             }
             None => return Err(format!("parameter `{name}` is missing `in`")),
         };
-        if !seen.insert((name.to_string(), location)) {
-            return Err(format!("duplicate parameter `{name}`"));
+        if !seen.insert(name.to_string()) {
+            return Err(format!(
+                "duplicate parameter name `{name}` is ambiguous in the G0 binding model"
+            ));
         }
 
         if parameter.get("content").is_some() {
