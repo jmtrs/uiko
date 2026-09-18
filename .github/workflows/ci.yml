@@ -16,12 +16,8 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
-      - name: Resolve M5 dependency lock (temporary branch step)
-        run: |
-          cargo generate-lockfile
-          echo '---BEGIN-CARGO-LOCK---'
-          cat Cargo.lock
-          echo '---END-CARGO-LOCK---'
+      - name: Lockfile is current
+        run: cargo metadata --locked --no-deps > /dev/null
       - name: Format
         run: cargo fmt --check
       - name: Clippy
@@ -116,7 +112,7 @@ jobs:
           jq -e '
             .status == "frozen-g0-v1"
             and .tokenization.id == "unicode-lexical-v1"
-            and .tokenization.pattern == "[\\\\p{L}\\\\p{N}_]+|[^\\\\s]"
+            and .tokenization.pattern == "[\\p{L}\\p{N}_]+|[^\\s]"
             and .tokenization.diffAlgorithm == "Myers diff over token sequences"
             and (.arms.C_UIKO.coreOwned | index("hosts/**") != null)
           ' experiments/g0/path-policy.json > /dev/null
