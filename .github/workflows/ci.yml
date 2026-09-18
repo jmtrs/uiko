@@ -160,13 +160,13 @@ jobs:
       - name: D05 prerequisite is deterministic and executable
         run: |
           base="$(git rev-parse HEAD)"
-          first="$(bash ../../g0/materialize-prerequisite-base.sh R_RENDER_ONLY G0-D05 ../..)"
+          first="$(bash ../../g0/materialize-prerequisite-base.sh R_RENDER_ONLY G0-D05 ../../..)"
           npm run generate:api
           npm run typecheck
           npm run lint
           git reset --hard --quiet "$base"
           rm -f package-lock.json src/api/generated/schema.d.ts
-          second="$(bash ../../g0/materialize-prerequisite-base.sh R_RENDER_ONLY G0-D05 ../..)"
+          second="$(bash ../../g0/materialize-prerequisite-base.sh R_RENDER_ONLY G0-D05 ../../..)"
           test "$first" = "$second"
 
   g0-harness:
