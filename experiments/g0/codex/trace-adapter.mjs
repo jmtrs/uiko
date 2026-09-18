@@ -1,6 +1,7 @@
 import { spawn, spawnSync } from "node:child_process";
 import { createWriteStream } from "node:fs";
 import { readFile } from "node:fs/promises";
+import { resolve } from "node:path";
 import { createInterface } from "node:readline";
 import { TextDecoder } from "node:util";
 
@@ -52,6 +53,10 @@ export class SnapshotObserver {
   }
 
   async initialize() {
+    this.previous = await snapshotTextFiles(this.repoRoot);
+  }
+
+  async rebaseline() {
     this.previous = await snapshotTextFiles(this.repoRoot);
   }
 
@@ -190,7 +195,7 @@ export async function snapshotTextFiles(repoRoot) {
 
   for (const path of paths) {
     try {
-      const bytes = await readFile(new URL(`file://${repoRoot}/${encodeURIPath(path)}`));
+      const bytes = await readFile(resolve(repoRoot, path));
       let text;
       try {
         text = decoder.decode(bytes);
@@ -348,13 +353,6 @@ function integerUsage(usage, keys) {
     }
   }
   return null;
-}
-
-function encodeURIPath(path) {
-  return path
-    .split("/")
-    .map((part) => encodeURIComponent(part))
-    .join("/");
 }
 
 async function nextSequence(tracePath) {
