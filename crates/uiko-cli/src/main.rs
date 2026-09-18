@@ -166,8 +166,8 @@ fn build(args: &[String]) -> ExitCode {
 }
 
 fn compile_project(project: &Path) -> Result<AppIr, Vec<Diagnostic>> {
-    let source = load_project(project)?;
-    compile(&source)
+    let loaded = load_project(project)?;
+    compile(&loaded.source, &loaded.capabilities)
 }
 
 fn emit_diagnostics(diagnostics: &[Diagnostic], json: bool) -> ExitCode {
