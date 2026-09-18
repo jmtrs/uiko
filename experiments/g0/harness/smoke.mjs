@@ -1,3 +1,5 @@
+import { chromium } from "@playwright/test";
+
 import { spawnManaged, stopManaged, waitForHttp } from "./processes.mjs";
 
 const child = spawnManaged(
@@ -30,6 +32,15 @@ try {
 
   const orders = await (await fetch(`${base}/customers/cus_ada/orders`)).json();
   assert(orders.items.length === 2, "Ada orders mismatch");
+
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await browser.newPage();
+    const response = await page.goto(`${base}/__harness/health`);
+    assert(response?.ok(), "Chromium could not reach the fixture");
+  } finally {
+    await browser.close();
+  }
 
   const journal = await (await fetch(`${base}/__harness/requests`)).json();
   assert(journal.requests.length === 5, `expected 5 API requests, got ${journal.requests.length}`);
