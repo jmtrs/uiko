@@ -120,8 +120,22 @@ pub struct ModuleIr {
 pub struct PageIr {
     pub id: String,
     pub route: String,
+    pub state: Vec<PageStateIr>,
     pub queries: Vec<QueryIr>,
     pub components: Vec<ComponentIr>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PageStateIr {
+    pub id: String,
+    pub initial: StateValueIr,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum StateValueIr {
+    String(String),
+    Integer(i64),
+    Null,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -147,8 +161,33 @@ pub struct ComponentIr {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SelectOptionIr {
+    pub label: String,
+    pub value: StateValueIr,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ComponentKindIr {
-    Text { value: String },
-    Field { label: String, binding: String },
-    Table { binding: String },
+    Text {
+        value: String,
+    },
+    Field {
+        label: String,
+        binding: String,
+        fallback: Option<String>,
+    },
+    Table {
+        binding: String,
+    },
+    Select {
+        label: String,
+        state: String,
+        options: Vec<SelectOptionIr>,
+    },
+    Pagination {
+        state: String,
+        page_binding: String,
+        page_size_binding: String,
+        total_binding: String,
+    },
 }

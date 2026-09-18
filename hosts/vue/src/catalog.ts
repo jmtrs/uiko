@@ -4,6 +4,8 @@ import { schema } from "@json-render/vue/schema";
 import { h } from "vue";
 import { z } from "zod";
 
+const stateValueSchema = z.union([z.string(), z.number().int(), z.null()]);
+
 export const catalog = defineCatalog(schema, {
   components: {
     Stack: {
@@ -35,6 +37,32 @@ export const catalog = defineCatalog(schema, {
         rows: z.array(z.unknown()),
       }),
       description: "Generic table over a compiled list binding.",
+    },
+    Select: {
+      props: z.object({
+        uikoId: z.string(),
+        label: z.string(),
+        state: z.string(),
+        value: stateValueSchema,
+        options: z.array(
+          z.object({
+            label: z.string(),
+            value: stateValueSchema,
+          }),
+        ),
+      }),
+      description: "Select one scalar page-state value.",
+    },
+    Pagination: {
+      props: z.object({
+        uikoId: z.string(),
+        state: z.string(),
+        value: stateValueSchema,
+        page: z.number().int().nullable(),
+        pageSize: z.number().int().nullable(),
+        total: z.number().int().nullable(),
+      }),
+      description: "Previous/Next control for one integer page-state value.",
     },
   },
   actions: {},
@@ -74,6 +102,91 @@ export const { registry } = defineRegistry(catalog, {
         ],
       ),
     Table: ({ props }) => renderTable(props.uikoId, props.binding, props.rows),
+    Select: ({ props }) => {
+      const selectedIndex = props.options.findIndex((option) =>
+        stateValueEquals(option.value, props.value),
+      );
+      return h(
+        "label",
+        {
+          "data-uiko-id": props.uikoId,
+          "data-uiko-kind": "Select",
+          "data-uiko-state": props.state,
+        },
+        [
+          h("span", null, props.label),
+          h(
+            "select",
+            {
+              "aria-label": props.label,
+              value: String(selectedIndex >= 0 ? selectedIndex : 0),
+              onChange: (event: Event) => {
+                const target = event.target;
+                if (!(target instanceof HTMLSelectElement)) {
+                  return;
+                }
+                const option = props.options[Number(target.value)];
+                if (option !== undefined) {
+                  dispatchStateChange(props.state, option.value);
+                }
+              },
+            },
+            props.options.map((option, index) =>
+              h("option", { value: String(index) }, option.label),
+            ),
+          ),
+        ],
+      );
+    },
+    Pagination: ({ props }) => {
+      const currentPage =
+        props.page ?? (typeof props.value === "number" ? props.value : 1);
+      const previousDisabled = props.page === null || currentPage <= 1;
+      const nextDisabled =
+        props.page === null ||
+        props.pageSize === null ||
+        props.total === null ||
+        currentPage * props.pageSize >= props.total;
+
+      return h(
+        "nav",
+        {
+          "aria-label": "Pagination",
+          "data-uiko-id": props.uikoId,
+          "data-uiko-kind": "Pagination",
+          "data-uiko-state": props.state,
+        },
+        [
+          h(
+            "button",
+            {
+              type: "button",
+              disabled: previousDisabled,
+              onClick: () => {
+                if (!previousDisabled) {
+                  dispatchStateChange(props.state, currentPage - 1);
+                }
+              },
+            },
+            "Previous",
+          ),
+          h("span", { "aria-live": "polite" }, `Page ${currentPage}`),
+          h(
+            "button",
+            {
+              type: "button",
+              disabled: nextDisabled,
+              onClick: () => {
+                if (!nextDisabled) {
+                  dispatchStateChange(props.state, currentPage + 1);
+                }
+              },
+            },
+            "Next",
+          ),
+        ],
+      );
+    },
   },
 });
 
@@ -118,6 +231,24 @@ function renderTable(
       ),
     ],
   );
+}
+
+function dispatchStateChange(
+  state: string,
+  value: string | number | null,
+): void {
+  window.dispatchEvent(
+    new CustomEvent("uiko-state-change", {
+      detail: { state, value },
+    }),
+  );
+}
+
+function stateValueEquals(
+  left: string | number | null,
+  right: string | number | null,
+): boolean {
+  return left === right;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

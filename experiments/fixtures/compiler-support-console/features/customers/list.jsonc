@@ -1,14 +1,40 @@
 {
   "id": "CustomerList",
   "route": "/customers",
+  "state": {
+    "status": null,
+    "page": 1
+  },
   "queries": {
     "customers": {
       "operation": "crm.listCustomers",
-      "input": {}
+      "input": {
+        "status": "state.status",
+        "page": "state.page"
+      }
     }
   },
   "components": [
     { "id": "title", "type": "Text", "value": "Customers" },
-    { "id": "table", "type": "Table", "binding": "customers.items" }
+    {
+      "id": "status",
+      "type": "Select",
+      "label": "Status",
+      "state": "status",
+      "options": [
+        { "label": "All", "value": null },
+        { "label": "Active", "value": "active" },
+        { "label": "Inactive", "value": "inactive" }
+      ]
+    },
+    { "id": "table", "type": "Table", "binding": "customers.items" },
+    {
+      "id": "pagination",
+      "type": "Pagination",
+      "state": "page",
+      "page": "customers.page",
+      "pageSize": "customers.pageSize",
+      "total": "customers.total"
+    }
   ]
 }

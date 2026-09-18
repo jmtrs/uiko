@@ -40,8 +40,22 @@ pub struct ModuleSource {
 pub struct PageSource {
     pub id: Located<String>,
     pub route: Located<String>,
+    pub state: Vec<Located<PageStateSource>>,
     pub queries: Vec<Located<QuerySource>>,
     pub components: Vec<Located<ComponentSource>>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PageStateSource {
+    pub id: Located<String>,
+    pub initial: StateValueSource,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum StateValueSource {
+    String(String),
+    Integer(i64),
+    Null,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -64,8 +78,33 @@ pub struct ComponentSource {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SelectOptionSource {
+    pub label: String,
+    pub value: StateValueSource,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ComponentKindSource {
-    Text { value: String },
-    Field { label: String, binding: String },
-    Table { binding: String },
+    Text {
+        value: String,
+    },
+    Field {
+        label: String,
+        binding: String,
+        fallback: Option<String>,
+    },
+    Table {
+        binding: String,
+    },
+    Select {
+        label: String,
+        state: String,
+        options: Vec<SelectOptionSource>,
+    },
+    Pagination {
+        state: String,
+        page_binding: String,
+        page_size_binding: String,
+        total_binding: String,
+    },
 }
