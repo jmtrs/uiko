@@ -123,52 +123,16 @@ export function prepareExecutionBase({
 }
 
 export function cleanupHarnessArtifacts(repoRoot, arm) {
-  const restore = [];
-  const remove = [];
+  const transient = [];
 
-  switch (arm) {
-    case "B_FULL":
-      restore.push(
-        "baselines/b-full/package-lock.json",
-        "baselines/b-full/src/api/generated/schema.d.ts",
-        "experiments/g0/harness/package-lock.json",
-      );
-      break;
-    case "C_UIKO":
-      restore.push(
-        "hosts/vue/package-lock.json",
-        "experiments/g0/harness/package-lock.json",
-      );
-      remove.push("hosts/vue/public/app.uiko-manifest.json");
-      break;
-    case "R_RENDER_ONLY":
-      restore.push(
-        "experiments/controls/r-render-only/package-lock.json",
-        "experiments/controls/r-render-only/src/api/generated/schema.d.ts",
-        "experiments/g0/harness/package-lock.json",
-      );
-      break;
-    case "T_AUTHORING":
-      restore.push(
-        "hosts/vue/package-lock.json",
-        "experiments/g0/harness/package-lock.json",
-        "experiments/controls/t-authoring/generated",
-      );
-      remove.push("hosts/vue/public/app.uiko-manifest.json");
-      break;
-    default:
-      throw new Error(`unknown G0 arm ${arm}`);
+  if (arm === "C_UIKO" || arm === "T_AUTHORING") {
+    transient.push("hosts/vue/public/app.uiko-manifest.json");
   }
 
-  const trackedRestore = restore.filter((path) =>
-    gitPathIsTracked(repoRoot, path),
-  );
-  if (trackedRestore.length > 0) {
-    runChecked("git", ["checkout", "--", ...trackedRestore], repoRoot);
-  }
-
-  for (const path of remove) {
-    runChecked("git", ["clean", "-f", "--", path], repoRoot, { allowFailure: true });
+  for (const path of transient) {
+    runChecked("git", ["clean", "-f", "--", path], repoRoot, {
+      allowFailure: true,
+    });
   }
 }
 
