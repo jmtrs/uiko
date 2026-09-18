@@ -10,5 +10,9 @@ uiko-capabilities = { path = "../uiko-capabilities" }
 uiko-core = { path = "../uiko-core" }
 uiko-source = { path = "../uiko-source" }
 
+[dev-dependencies]
+uiko-openapi = { path = "../uiko-openapi" }
+uiko-source-jsonc = { path = "../uiko-source-jsonc" }
+
 [lints]
 workspace = true
