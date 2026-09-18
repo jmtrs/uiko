@@ -1,0 +1,106 @@
+{
+  "schemaVersion": 1,
+  "status": "frozen-g0-v1",
+  "globSemantics": "gitignore-style",
+  "tokenization": {
+    "id": "unicode-lexical-v1",
+    "pattern": "[\\p{L}\\p{N}_]+|[^\\s]",
+    "unicode": true,
+    "diffAlgorithm": "Myers diff over token sequences",
+    "countRule": "Count tokens present on the inserted/replacement side of the diff. Pure deletions count as zero authored tokens."
+  },
+  "metrics": {
+    "accepted_change_tokens": "For each application-owned file, tokenize frozen-base and accepted-final contents, run the frozen token diff, and sum inserted/replacement tokens.",
+    "cumulative_authored_edit_tokens": "For every file mutation during the run, tokenize before/after contents, run the same token diff, and sum inserted/replacement tokens for application-owned paths, including edits later reverted or superseded.",
+    "non_application_edit_tokens": "The same cumulative calculation for generated, core-owned, harness-owned or otherwise excluded paths; reported separately and never used to manufacture a G0 win."
+  },
+  "arms": {
+    "B_FULL": {
+      "applicationOwned": [
+        "baselines/b-full/src/**",
+        "baselines/b-full/index.html",
+        "baselines/b-full/vite.config.ts",
+        "baselines/b-full/eslint.config.js",
+        "baselines/b-full/tsconfig*.json"
+      ],
+      "generated": [
+        "baselines/b-full/src/api/generated/**",
+        "baselines/b-full/package-lock.json",
+        "baselines/b-full/dist/**",
+        "baselines/b-full/coverage/**",
+        "baselines/b-full/playwright-report/**",
+        "baselines/b-full/test-results/**",
+        "baselines/b-full/node_modules/**"
+      ],
+      "harnessOwnedReadOnly": [
+        "experiments/**",
+        "baselines/b-full/package.json",
+        "baselines/b-full/stack-lock.json"
+      ],
+      "coreOwned": []
+    },
+    "C_UIKO": {
+      "applicationOwned": [
+        "fixtures/support-console/uiko.jsonc",
+        "fixtures/support-console/features/**/*.jsonc"
+      ],
+      "generated": [
+        "target/**",
+        "**/generated/**",
+        "**/*.uiko-manifest.json"
+      ],
+      "harnessOwnedReadOnly": [
+        "experiments/**"
+      ],
+      "coreOwned": [
+        "crates/**",
+        "docs/**",
+        "Cargo.toml",
+        "Cargo.lock",
+        "rust-toolchain.toml"
+      ]
+    },
+    "R_RENDER_ONLY": {
+      "applicationOwned": [
+        "experiments/controls/r-render-only/src/**",
+        "experiments/controls/r-render-only/ui/**/*.json"
+      ],
+      "generated": [
+        "experiments/controls/r-render-only/src/api/generated/**",
+        "experiments/controls/r-render-only/package-lock.json",
+        "experiments/controls/r-render-only/dist/**",
+        "experiments/controls/r-render-only/node_modules/**"
+      ],
+      "harnessOwnedReadOnly": [
+        "experiments/fixtures/**",
+        "experiments/tasks/**",
+        "experiments/g0/**"
+      ],
+      "coreOwned": []
+    },
+    "T_AUTHORING": {
+      "applicationOwned": [
+        "experiments/controls/t-authoring/**/*.ts"
+      ],
+      "generated": [
+        "target/**",
+        "**/generated/**"
+      ],
+      "harnessOwnedReadOnly": [
+        "experiments/fixtures/**",
+        "experiments/tasks/**",
+        "experiments/g0/**"
+      ],
+      "coreOwned": [
+        "crates/**",
+        "docs/**"
+      ]
+    }
+  },
+  "rules": [
+    "A task cannot be accepted with harness-owned acceptance code modified.",
+    "A C_UIKO task that requires compiler/core-owned edits sets coreModification=true and cannot support a positive G0 locality claim.",
+    "Generated artifacts never count toward accepted_change_tokens, but generated/non-application edit activity is reported separately.",
+    "Dependency-version changes after freeze are protocol deviations."
+  ]
+}
