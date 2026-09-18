@@ -2,7 +2,18 @@
 
 This directory is part of the product, not benchmark decoration.
 
-Week 0 establishes the task manifest format, path-exclusion policy, measurement vocabulary, and the strong conventional B-full baseline before compiler tuning begins.
+## G0 freeze
+
+The first G0 experiment definition is frozen as `g0-v1`:
+
+- `g0/protocol-v1.md` — run procedure and GO/NO-GO rules;
+- `g0/path-policy.json` — authored-source, exclusion and tokenization rules;
+- `g0/repair-classification.md` — LOCAL / WIRING / COHERENCE / VISUAL_FIT / ENVIRONMENT;
+- `g0/run-result.schema.json` — arm-neutral result format;
+- `g0/run-template.json` — result skeleton;
+- `tasks/dev-manifest.json` — six pre-registered G0 development tasks;
+- `fixtures/g0-support-api.openapi.json` — shared read-only API contract;
+- `../baselines/b-full/stack-lock.json` — exact conventional baseline versions.
 
 Primary durable task-level measures for G0/final evaluation:
 
@@ -14,4 +25,8 @@ Primary durable task-level measures for G0/final evaluation:
 - browser / VISUAL_FIT iterations
 - completion outcome
 
-Hold-out tasks must remain sealed until the measurement window.
+Every G0 task starts from a fresh frozen arm base; tasks are not cumulative.
+
+R-render-only and T-authoring are mechanism probes on D01, D02 and D05. They are not headline experimental arms.
+
+Hold-out tasks remain sealed until their measurement window. G0 development tasks are intentionally readable because they are used to tune and decide whether the product thesis justifies further investment.
