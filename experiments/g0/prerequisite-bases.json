@@ -43,6 +43,9 @@
     },
     "R_RENDER_ONLY": {
       "D03": "experiments/g0/prerequisites/R_RENDER_ONLY/D03"
+    },
+    "T_AUTHORING": {
+      "D03": "experiments/g0/prerequisites/T_AUTHORING/D03"
     }
   },
   "syntheticCommit": {
