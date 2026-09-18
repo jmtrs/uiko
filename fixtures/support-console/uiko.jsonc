@@ -1,7 +1,7 @@
 {
-  // Minimal compiler fixture for the pre-G0 slice.
+  // Frozen C_UIKO G0 base: infrastructure only, no D01-D06 feature behavior.
   "name": "support-console",
   "specVersion": 1,
-  "modules": ["./features/customers"],
+  "modules": [],
   "integrations": ["./integrations/crm.jsonc"]
 }
