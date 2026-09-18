@@ -1,9 +1,10 @@
 #![forbid(unsafe_code)]
 
-use std::{fmt::Write as _, path::PathBuf, process::ExitCode};
+use std::{fmt::Write as _, fs, path::PathBuf, process::ExitCode};
 
 use uiko_compiler::compile;
-use uiko_core::{Diagnostic, Severity};
+use uiko_core::{AppIr, Diagnostic, Severity};
+use uiko_manifest::derive_ui_manifest;
 use uiko_project::load_project;
 
 fn main() -> ExitCode {
@@ -21,6 +22,10 @@ fn main() -> ExitCode {
         Some("validate") => {
             let validate_args: Vec<_> = args.collect();
             validate(&validate_args)
+        }
+        Some("build") => {
+            let build_args: Vec<_> = args.collect();
+            build(&build_args)
         }
         Some(command) => {
             eprintln!("UIKO0001: unknown command `{command}`");
@@ -69,11 +74,7 @@ fn validate(args: &[String]) -> ExitCode {
         }
     }
 
-    let source = match load_project(&project) {
-        Ok(source) => source,
-        Err(diagnostics) => return emit_diagnostics(&diagnostics, json),
-    };
-    let ir = match compile(&source) {
+    let ir = match compile_project(&project) {
         Ok(ir) => ir,
         Err(diagnostics) => return emit_diagnostics(&diagnostics, json),
     };
@@ -94,6 +95,74 @@ fn validate(args: &[String]) -> ExitCode {
     }
 
     ExitCode::SUCCESS
+}
+
+fn build(args: &[String]) -> ExitCode {
+    let mut project = PathBuf::from(".");
+    let mut project_set = false;
+    let mut output: Option<PathBuf> = None;
+    let mut index = 0;
+
+    while index < args.len() {
+        match args[index].as_str() {
+            "--ui-manifest" => {
+                let Some(path) = args.get(index + 1) else {
+                    eprintln!("UIKO0002: --ui-manifest requires an output path");
+                    return ExitCode::from(2);
+                };
+                output = Some(PathBuf::from(path));
+                index += 2;
+            }
+            option if option.starts_with('-') => {
+                eprintln!("UIKO0002: unknown build option `{option}`");
+                return ExitCode::from(2);
+            }
+            path if !project_set => {
+                project = PathBuf::from(path);
+                project_set = true;
+                index += 1;
+            }
+            extra => {
+                eprintln!("UIKO0002: unexpected build argument `{extra}`");
+                return ExitCode::from(2);
+            }
+        }
+    }
+
+    let Some(output) = output else {
+        eprintln!("UIKO0002: build requires --ui-manifest <OUTPUT>");
+        return ExitCode::from(2);
+    };
+
+    let ir = match compile_project(&project) {
+        Ok(ir) => ir,
+        Err(diagnostics) => return emit_diagnostics(&diagnostics, false),
+    };
+    let manifest = derive_ui_manifest(&ir);
+
+    if let Some(parent) = output.parent()
+        && !parent.as_os_str().is_empty()
+        && let Err(error) = fs::create_dir_all(parent)
+    {
+        eprintln!("UIKO0003: cannot create output directory: {error}");
+        return ExitCode::from(2);
+    }
+
+    if let Err(error) = fs::write(&output, manifest.to_json_pretty()) {
+        eprintln!(
+            "UIKO0003: cannot write UI manifest `{}`: {error}",
+            output.display()
+        );
+        return ExitCode::from(2);
+    }
+
+    println!("wrote UI manifest: {}", output.display());
+    ExitCode::SUCCESS
+}
+
+fn compile_project(project: &PathBuf) -> Result<AppIr, Vec<Diagnostic>> {
+    let source = load_project(project)?;
+    compile(&source)
 }
 
 fn emit_diagnostics(diagnostics: &[Diagnostic], json: bool) -> ExitCode {
@@ -166,7 +235,7 @@ fn json_escape(value: &str) -> String {
 
 fn print_help() {
     println!(
-        "uiko {}\n\nUSAGE:\n    uiko [--help|--version]\n    uiko validate [PROJECT] [--format json]\n\nCOMMANDS:\n    validate    load and compile a uiko project without browser execution",
+        "uiko {}\n\nUSAGE:\n    uiko [--help|--version]\n    uiko validate [PROJECT] [--format json]\n    uiko build [PROJECT] --ui-manifest <OUTPUT>\n\nCOMMANDS:\n    validate    load and compile a uiko project without browser execution\n    build       emit deterministic public build artifacts",
         env!("CARGO_PKG_VERSION")
     );
 }
