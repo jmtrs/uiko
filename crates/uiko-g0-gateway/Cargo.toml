@@ -1,0 +1,25 @@
+[package]
+name = "uiko-g0-gateway"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "uiko-g0-gateway"
+path = "src/main.rs"
+
+[dependencies]
+axum = "=0.8.9"
+reqwest = { version = "=0.13.5", default-features = false, features = ["json", "rustls"] }
+serde = { version = "=1.0.229", features = ["derive"] }
+serde_json = "=1.0.151"
+tokio = { version = "=1.51.4", features = ["macros", "net", "rt-multi-thread", "time"] }
+url = "=2.5.8"
+uiko-capabilities = { path = "../uiko-capabilities" }
+uiko-compiler = { path = "../uiko-compiler" }
+uiko-project = { path = "../uiko-project" }
+uiko-runtime-plan = { path = "../uiko-runtime-plan" }
+
+[lints]
+workspace = true
