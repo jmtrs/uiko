@@ -1,7 +1,7 @@
-import type { UiRoute } from "./manifest";
+import type { UiRoute, UiStateValue } from "./manifest";
 
 export interface JsonRenderElement {
-  type: "Stack" | "Text" | "Field" | "Table";
+  type: "Stack" | "Text" | "Field" | "Table" | "Select" | "Pagination";
   props: Record<string, unknown>;
   children: string[];
 }
@@ -15,6 +15,7 @@ export interface JsonRenderSpec {
 export function toJsonRenderSpec(
   route: UiRoute,
   queryData: Readonly<Record<string, unknown>>,
+  pageState: Readonly<Record<string, UiStateValue>>,
 ): JsonRenderSpec {
   const root = `${route.id}.root`;
   const elements: Record<string, JsonRenderElement> = {
@@ -39,18 +40,24 @@ export function toJsonRenderSpec(
           children: [],
         };
         break;
-      case "Field":
+      case "Field": {
+        const resolved = resolveBinding(queryData, component.binding);
         elements[component.id] = {
           type: "Field",
           props: {
             uikoId: component.id,
             label: component.label,
             binding: component.binding,
-            value: resolveBinding(queryData, component.binding),
+            value:
+              (resolved === null || resolved === undefined) &&
+              component.fallback !== undefined
+                ? component.fallback
+                : resolved,
           },
           children: [],
         };
         break;
+      }
       case "Table": {
         const resolved = resolveBinding(queryData, component.binding);
         elements[component.id] = {
@@ -64,6 +71,33 @@ export function toJsonRenderSpec(
         };
         break;
       }
+      case "Select":
+        elements[component.id] = {
+          type: "Select",
+          props: {
+            uikoId: component.id,
+            label: component.label,
+            state: component.state,
+            value: pageState[component.state] ?? null,
+            options: component.options,
+          },
+          children: [],
+        };
+        break;
+      case "Pagination":
+        elements[component.id] = {
+          type: "Pagination",
+          props: {
+            uikoId: component.id,
+            state: component.state,
+            value: pageState[component.state] ?? null,
+            page: numericBinding(queryData, component.page),
+            pageSize: numericBinding(queryData, component.pageSize),
+            total: numericBinding(queryData, component.total),
+          },
+          children: [],
+        };
+        break;
     }
   }
 
@@ -72,6 +106,14 @@ export function toJsonRenderSpec(
     elements,
     state: {},
   };
+}
+
+function numericBinding(
+  queryData: Readonly<Record<string, unknown>>,
+  binding: string,
+): number | null {
+  const value = resolveBinding(queryData, binding);
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
 function resolveBinding(
