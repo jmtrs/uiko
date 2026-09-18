@@ -8,16 +8,17 @@ use jsonc_parser::{
     common::{Range, Ranged},
     parse_to_ast,
 };
-use uiko_core::{Diagnostic, Located, SourceId, TextSpan};
+use uiko_core::{Diagnostic, Located, ScalarValue, SourceId, TextSpan};
 use uiko_source::{
     AppConfigSource, ComponentKindSource, ComponentSource, InputBindingSource,
-    IntegrationConfigSource, ModuleConfigSource, PageSource, QuerySource,
+    IntegrationConfigSource, ModuleConfigSource, PageSource, QuerySource, SelectOptionSource,
+    StateSource, TableColumnSource,
 };
 
 const APP_FIELDS: [&str; 4] = ["name", "specVersion", "modules", "integrations"];
 const MODULE_FIELDS: [&str; 2] = ["id", "pages"];
 const INTEGRATION_FIELDS: [&str; 3] = ["id", "adapter", "contract"];
-const PAGE_FIELDS: [&str; 4] = ["id", "route", "queries", "components"];
+const PAGE_FIELDS: [&str; 5] = ["id", "route", "state", "queries", "components"];
 const QUERY_FIELDS: [&str; 2] = ["operation", "input"];
 
 /// Parse the root uiko project source into located, authoring-neutral DTOs.
@@ -125,18 +126,20 @@ pub fn parse_page(
     let mut diagnostics = validate_properties(&object, &PAGE_FIELDS, "page", source_id);
     let id = parse_required_string(&object, "id", source_id, &mut diagnostics);
     let route = parse_required_string(&object, "route", source_id, &mut diagnostics);
+    let state = parse_state(&object, source_id, &mut diagnostics);
     let queries = parse_queries(&object, source_id, &mut diagnostics);
     let components = parse_components(&object, source_id, &mut diagnostics);
 
     finish(
         diagnostics,
-        (id, route, queries, components),
+        (id, route, state, queries, components),
         source_id,
         object.range,
-        |(id, route, queries, components)| {
+        |(id, route, state, queries, components)| {
             Some(PageSource {
                 id: id?,
                 route: route?,
+                state: state?,
                 queries: queries?,
                 components: components?,
             })
@@ -467,6 +470,173 @@ fn parse_query_input(
     Some(result)
 }
 
+fn parse_state(
+    object: &Object<'_>,
+    source_id: &SourceId,
+    diagnostics: &mut Vec<Diagnostic>,
+) -> Option<Vec<Located<StateSource>>> {
+    let Some(property) = object.get("state") else {
+        return Some(Vec::new());
+    };
+    let Value::Object(state) = &property.value else {
+        diagnostics.push(Diagnostic::error(
+            "UIKO1014",
+            "property `state` must be an object",
+            span(source_id, property.value.range()),
+        ));
+        return None;
+    };
+
+    let mut seen = BTreeSet::new();
+    let mut result = Vec::with_capacity(state.properties.len());
+    for entry in &state.properties {
+        let id = entry.name.as_str();
+        if !seen.insert(id) {
+            diagnostics.push(Diagnostic::error(
+                "UIKO1006",
+                format!("duplicate state key `{id}`"),
+                span(source_id, entry.name.range()),
+            ));
+            continue;
+        }
+        let Some(initial) = scalar_value(&entry.value, source_id, diagnostics) else {
+            continue;
+        };
+        result.push(Located::new(
+            StateSource {
+                id: Located::new(id.to_string(), span(source_id, entry.name.range())),
+                initial,
+            },
+            span(source_id, entry.value.range()),
+        ));
+    }
+    Some(result)
+}
+
+fn scalar_value(
+    value: &Value<'_>,
+    source_id: &SourceId,
+    diagnostics: &mut Vec<Diagnostic>,
+) -> Option<Located<ScalarValue>> {
+    let scalar = match value {
+        Value::StringLit(value) => ScalarValue::String(value.value.to_string()),
+        Value::NumberLit(value) => ScalarValue::Number(value.value.to_string()),
+        Value::BooleanLit(value) => ScalarValue::Boolean(value.value),
+        Value::NullKeyword(_) => ScalarValue::Null,
+        other => {
+            diagnostics.push(Diagnostic::error(
+                "UIKO1015",
+                "state and option values must be JSON scalars",
+                span(source_id, other.range()),
+            ));
+            return None;
+        }
+    };
+    Some(Located::new(scalar, span(source_id, value.range())))
+}
+
+fn parse_optional_string(
+    object: &Object<'_>,
+    field: &'static str,
+    source_id: &SourceId,
+    diagnostics: &mut Vec<Diagnostic>,
+) -> Option<Option<String>> {
+    object.get(field).map_or(Some(None), |property| {
+        string_value(property, field, source_id, diagnostics).map(|value| Some(value.value))
+    })
+}
+
+fn parse_table_columns(
+    object: &Object<'_>,
+    source_id: &SourceId,
+    diagnostics: &mut Vec<Diagnostic>,
+) -> Option<Vec<TableColumnSource>> {
+    let Some(property) = object.get("columns") else {
+        return Some(Vec::new());
+    };
+    let Value::Array(columns) = &property.value else {
+        diagnostics.push(Diagnostic::error(
+            "UIKO1016",
+            "Table `columns` must be an array",
+            span(source_id, property.value.range()),
+        ));
+        return None;
+    };
+
+    let mut result = Vec::with_capacity(columns.elements.len());
+    for value in &columns.elements {
+        let Value::Object(column) = value else {
+            diagnostics.push(Diagnostic::error(
+                "UIKO1016",
+                "each Table column must be an object",
+                span(source_id, value.range()),
+            ));
+            continue;
+        };
+        diagnostics.extend(validate_properties(
+            column,
+            &["label", "binding"],
+            "Table column",
+            source_id,
+        ));
+        let label = parse_required_string(column, "label", source_id, diagnostics);
+        let binding = parse_required_string(column, "binding", source_id, diagnostics);
+        if let (Some(label), Some(binding)) = (label, binding) {
+            result.push(TableColumnSource {
+                label: label.value,
+                binding: binding.value,
+            });
+        }
+    }
+    Some(result)
+}
+
+fn parse_select_options(
+    object: &Object<'_>,
+    source_id: &SourceId,
+    diagnostics: &mut Vec<Diagnostic>,
+) -> Option<Vec<SelectOptionSource>> {
+    let property = required_property(object, "options", source_id, diagnostics)?;
+    let Value::Array(options) = &property.value else {
+        diagnostics.push(Diagnostic::error(
+            "UIKO1017",
+            "Select `options` must be an array",
+            span(source_id, property.value.range()),
+        ));
+        return None;
+    };
+
+    let mut result = Vec::with_capacity(options.elements.len());
+    for value in &options.elements {
+        let Value::Object(option) = value else {
+            diagnostics.push(Diagnostic::error(
+                "UIKO1017",
+                "each Select option must be an object",
+                span(source_id, value.range()),
+            ));
+            continue;
+        };
+        diagnostics.extend(validate_properties(
+            option,
+            &["label", "value"],
+            "Select option",
+            source_id,
+        ));
+        let label = parse_required_string(option, "label", source_id, diagnostics);
+        let value_property = required_property(option, "value", source_id, diagnostics);
+        let scalar = value_property.and_then(|property| {
+            scalar_value(&property.value, source_id, diagnostics)
+        });
+        if let (Some(label), Some(value)) = (label, scalar) {
+            result.push(SelectOptionSource {
+                label: label.value,
+                value: value.value,
+            });
+        }
+    }
+    Some(result)
+}
+
 fn parse_components(
     object: &Object<'_>,
     source_id: &SourceId,
@@ -522,24 +692,72 @@ fn parse_component(
         "Field" => {
             diagnostics.extend(validate_properties(
                 object,
-                &["id", "type", "label", "binding"],
+                &["id", "type", "label", "binding", "fallback"],
                 "Field component",
                 source_id,
             ));
             ComponentKindSource::Field {
                 label: parse_required_string(object, "label", source_id, diagnostics)?.value,
                 binding: parse_required_string(object, "binding", source_id, diagnostics)?.value,
+                fallback: parse_optional_string(object, "fallback", source_id, diagnostics)?,
             }
         }
         "Table" => {
             diagnostics.extend(validate_properties(
                 object,
-                &["id", "type", "binding"],
+                &["id", "type", "binding", "columns"],
                 "Table component",
                 source_id,
             ));
             ComponentKindSource::Table {
                 binding: parse_required_string(object, "binding", source_id, diagnostics)?.value,
+                columns: parse_table_columns(object, source_id, diagnostics)?,
+            }
+        }
+        "Select" => {
+            diagnostics.extend(validate_properties(
+                object,
+                &["id", "type", "label", "state", "options"],
+                "Select component",
+                source_id,
+            ));
+            ComponentKindSource::Select {
+                label: parse_required_string(object, "label", source_id, diagnostics)?.value,
+                state: parse_required_string(object, "state", source_id, diagnostics)?.value,
+                options: parse_select_options(object, source_id, diagnostics)?,
+            }
+        }
+        "Pagination" => {
+            diagnostics.extend(validate_properties(
+                object,
+                &[
+                    "id",
+                    "type",
+                    "pageState",
+                    "page",
+                    "pageSize",
+                    "total",
+                ],
+                "Pagination component",
+                source_id,
+            ));
+            ComponentKindSource::Pagination {
+                page_state: parse_required_string(
+                    object,
+                    "pageState",
+                    source_id,
+                    diagnostics,
+                )?
+                .value,
+                page_binding: parse_required_string(object, "page", source_id, diagnostics)?.value,
+                page_size_binding: parse_required_string(
+                    object,
+                    "pageSize",
+                    source_id,
+                    diagnostics,
+                )?
+                .value,
+                total_binding: parse_required_string(object, "total", source_id, diagnostics)?.value,
             }
         }
         other => {
