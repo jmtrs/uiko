@@ -29,10 +29,12 @@ pub fn parse_app_config(
         (name, spec_version, modules),
         &source_id,
         object.range,
-        |(name, spec_version, modules)| AppConfigSource {
-            name: name?,
-            spec_version: spec_version?,
-            modules: modules?,
+        |(name, spec_version, modules)| {
+            Some(AppConfigSource {
+                name: name?,
+                spec_version: spec_version?,
+                modules: modules?,
+            })
         },
     )
 }
@@ -50,9 +52,11 @@ pub fn parse_module_config(
         (id, pages),
         &source_id,
         object.range,
-        |(id, pages)| ModuleConfigSource {
-            id: id?,
-            pages: pages?,
+        |(id, pages)| {
+            Some(ModuleConfigSource {
+                id: id?,
+                pages: pages?,
+            })
         },
     )
 }
@@ -68,10 +72,12 @@ pub fn parse_page(source_id: SourceId, text: &str) -> Result<Located<PageSource>
         (id, route, components),
         &source_id,
         object.range,
-        |(id, route, components)| PageSource {
-            id: id?,
-            route: route?,
-            components: components?,
+        |(id, route, components)| {
+            Some(PageSource {
+                id: id?,
+                route: route?,
+                components: components?,
+            })
         },
     )
 }
