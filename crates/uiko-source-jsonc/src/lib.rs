@@ -76,7 +76,10 @@ pub fn parse_module_config(
 /// # Errors
 ///
 /// Returns stable diagnostics for malformed pages or unsupported component shapes.
-pub fn parse_page(source_id: &SourceId, text: &str) -> Result<Located<PageSource>, Vec<Diagnostic>> {
+pub fn parse_page(
+    source_id: &SourceId,
+    text: &str,
+) -> Result<Located<PageSource>, Vec<Diagnostic>> {
     let object = parse_root_object(source_id, text)?;
     let mut diagnostics = validate_properties(&object, &PAGE_FIELDS, "page", source_id);
     let id = parse_required_string(&object, "id", source_id, &mut diagnostics);
