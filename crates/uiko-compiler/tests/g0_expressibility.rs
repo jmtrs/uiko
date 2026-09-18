@@ -5,8 +5,7 @@ use uiko_openapi::import_openapi_provider;
 use uiko_source::{AppSource, ModuleSource};
 use uiko_source_jsonc::parse_page;
 
-const CONTRACT: &str =
-    include_str!("../../../experiments/fixtures/g0-support-api.openapi.json");
+const CONTRACT: &str = include_str!("../../../experiments/fixtures/g0-support-api.openapi.json");
 
 fn compile_page(source: &str) {
     let source_id = SourceId::new("g0/task.jsonc");
