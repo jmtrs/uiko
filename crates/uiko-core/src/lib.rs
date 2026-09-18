@@ -128,6 +128,8 @@ pub struct PageIr {
 pub struct QueryIr {
     pub id: String,
     pub alias: String,
+    pub provider_id: String,
+    pub external_operation_id: String,
     pub input: Vec<QueryInputIr>,
     pub output: ValueShape,
 }
