@@ -48,6 +48,14 @@ case "$arm" in
     arm_root="$repo_root/fixtures/support-console"
     rm -rf "$arm_root/features"
     ;;
+  R_RENDER_ONLY)
+    arm_root="$repo_root/experiments/controls/r-render-only"
+    rm -rf "$arm_root/src/features"
+    ;;
+  T_AUTHORING)
+    arm_root="$repo_root/experiments/controls/t-authoring"
+    rm -rf "$arm_root/src"
+    ;;
   *)
     echo "materialization for arm $arm is not implemented yet" >&2
     exit 2
