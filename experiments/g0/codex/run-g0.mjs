@@ -45,7 +45,16 @@ async function main() {
   const adapterLock = await readJson(
     resolve(sourceRepo, "experiments/g0/codex/adapter-lock.json"),
   );
-  validateExperimentLock(experimentLock, adapterLock, arm, taskId);
+  const prerequisiteManifest = await readJson(
+    resolve(sourceRepo, "experiments/g0/prerequisite-bases.json"),
+  );
+  validateExperimentLock(
+    experimentLock,
+    adapterLock,
+    prerequisiteManifest,
+    arm,
+    taskId,
+  );
 
   const runId = `${taskId}-${arm}-r${replicate}`;
   const resultsDir = resolve(
@@ -61,14 +70,14 @@ async function main() {
 
   let pending;
   try {
-    const prerequisiteManifest = await readJson(
+    const worktreePrerequisiteManifest = await readJson(
       resolve(worktree, "experiments/g0/prerequisite-bases.json"),
     );
     const prepared = prepareExecutionBase({
       repoRoot: worktree,
       arm,
       taskId,
-      prerequisiteManifest,
+      prerequisiteManifest: worktreePrerequisiteManifest,
     });
     const expectedBase = experimentLock.taskBases?.[arm]?.[taskId];
     if (expectedBase !== prepared.baseRevision) {
@@ -320,7 +329,13 @@ async function frozenTask(repoRoot, taskId, arm) {
   return task;
 }
 
-function validateExperimentLock(lock, adapterLock, arm, taskId) {
+function validateExperimentLock(
+  lock,
+  adapterLock,
+  prerequisiteManifest,
+  arm,
+  taskId,
+) {
   if (lock.schemaVersion !== 1 || lock.status !== "frozen-g0-v1") {
     throw new Error("experiment-lock.json is not frozen-g0-v1");
   }
@@ -335,9 +350,43 @@ function validateExperimentLock(lock, adapterLock, arm, taskId) {
   ) {
     throw new Error("experiment lock must contain an explicit model and reasoning effort");
   }
-  if (typeof lock.taskBases?.[arm]?.[taskId] !== "string") {
+  const taskBase = lock.taskBases?.[arm]?.[taskId];
+  if (typeof taskBase !== "string") {
     throw new Error(`experiment lock has no task base for ${arm}/${taskId}`);
   }
+
+  const prerequisiteStage = prerequisiteManifest.taskBases?.[arm]?.[taskId];
+  if (typeof prerequisiteStage !== "string") {
+    throw new Error(
+      `prerequisite manifest has no task base for ${arm}/${taskId}`,
+    );
+  }
+  if (prerequisiteStage !== "EMPTY") {
+    const proof = lock.predecessorAcceptance?.[arm]?.[taskId];
+    const expectedPredecessor = predecessorTaskForStage(prerequisiteStage);
+    if (
+      proof?.passed !== true ||
+      proof.baseRevision !== taskBase ||
+      proof.predecessorTask !== expectedPredecessor
+    ) {
+      throw new Error(
+        `experiment lock has no valid predecessor acceptance proof for ${arm}/${taskId}`,
+      );
+    }
+  }
+}
+
+function predecessorTaskForStage(stage) {
+  const mapping = {
+    D01: "G0-D01",
+    D02: "G0-D02",
+    D03: "G0-D03",
+  };
+  const taskId = mapping[stage];
+  if (taskId === undefined) {
+    throw new Error(`unknown predecessor stage ${stage}`);
+  }
+  return taskId;
 }
 
 async function runAcceptance({
