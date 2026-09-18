@@ -63,6 +63,9 @@ The freezer:
   `harnessRevision`;
 - materializes every applicable arm/task execution base through the real setup
   path and records the resulting deterministic commit SHA;
+- runs the shared Playwright acceptance for every non-empty predecessor base
+  before the lock can be written, including the D03 predecessor used by the two
+  mechanism controls for D05;
 - records the exact Codex executable SHA-256 plus OS, architecture, Node, npm,
   Rust and Chromium versions from the machine that will execute G0;
 - writes `experiments/g0/experiment-lock.json`;
