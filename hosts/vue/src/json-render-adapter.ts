@@ -12,7 +12,10 @@ export interface JsonRenderSpec {
   state: Record<string, unknown>;
 }
 
-export function toJsonRenderSpec(route: UiRoute): JsonRenderSpec {
+export function toJsonRenderSpec(
+  route: UiRoute,
+  queryData: Readonly<Record<string, unknown>>,
+): JsonRenderSpec {
   const root = `${route.id}.root`;
   const elements: Record<string, JsonRenderElement> = {
     [root]: {
@@ -43,20 +46,24 @@ export function toJsonRenderSpec(route: UiRoute): JsonRenderSpec {
             uikoId: component.id,
             label: component.label,
             binding: component.binding,
+            value: resolveBinding(queryData, component.binding),
           },
           children: [],
         };
         break;
-      case "Table":
+      case "Table": {
+        const resolved = resolveBinding(queryData, component.binding);
         elements[component.id] = {
           type: "Table",
           props: {
             uikoId: component.id,
             binding: component.binding,
+            rows: Array.isArray(resolved) ? resolved : [],
           },
           children: [],
         };
         break;
+      }
     }
   }
 
@@ -65,4 +72,28 @@ export function toJsonRenderSpec(route: UiRoute): JsonRenderSpec {
     elements,
     state: {},
   };
+}
+
+function resolveBinding(
+  queryData: Readonly<Record<string, unknown>>,
+  binding: string,
+): unknown {
+  const [alias, ...path] = binding.split(".");
+  if (alias === undefined || alias.length === 0) {
+    return undefined;
+  }
+
+  let value: unknown = queryData[alias];
+  for (const segment of path) {
+    if (
+      typeof value !== "object" ||
+      value === null ||
+      Array.isArray(value) ||
+      !(segment in value)
+    ) {
+      return undefined;
+    }
+    value = (value as Record<string, unknown>)[segment];
+  }
+  return value;
 }

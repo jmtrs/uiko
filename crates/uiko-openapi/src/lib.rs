@@ -12,6 +12,29 @@ use uiko_core::{Diagnostic, SourceId, TextSpan};
 
 const ADAPTER_ID: &str = "uiko.openapi-http";
 
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct OpenApiTransportCatalog {
+    pub providers: BTreeMap<String, OpenApiTransportProvider>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct OpenApiTransportProvider {
+    pub id: String,
+    pub operations: BTreeMap<String, OpenApiGetTransport>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct OpenApiGetTransport {
+    pub path: String,
+    pub parameters: Vec<OperationParameter>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ImportedOpenApiProvider {
+    pub capabilities: CapabilityProvider,
+    pub transport: OpenApiTransportProvider,
+}
+
 /// Import the supported `OpenAPI` 3.1 read-only subset into uiko-owned capability semantics.
 ///
 /// Parsing is delegated to `oas3`; this strict visitor then accepts only the
@@ -25,7 +48,7 @@ pub fn import_openapi_provider(
     provider_id: &str,
     source_id: &SourceId,
     text: &str,
-) -> Result<CapabilityProvider, Vec<Diagnostic>> {
+) -> Result<ImportedOpenApiProvider, Vec<Diagnostic>> {
     let raw: Value = serde_json::from_str(text).map_err(|error| {
         vec![diagnostic(
             "UIKO2000",
@@ -75,6 +98,7 @@ pub fn import_openapi_provider(
     })?;
 
     let mut operations = BTreeMap::new();
+    let mut transport_operations = BTreeMap::new();
     let mut diagnostics = Vec::new();
 
     for (path, method, operation) in spec.operations() {
@@ -93,8 +117,9 @@ pub fn import_openapi_provider(
         };
 
         match import_get_operation(&raw, paths, &path, method.as_str(), operation_id) {
-            Ok(normalized) => {
+            Ok((normalized, transport)) => {
                 operations.insert(operation_id.to_string(), normalized);
+                transport_operations.insert(operation_id.to_string(), transport);
             }
             Err(message) => diagnostics.push(diagnostic(
                 "UIKO2005",
@@ -109,9 +134,15 @@ pub fn import_openapi_provider(
         return Err(diagnostics);
     }
 
-    Ok(CapabilityProvider {
-        id: provider_id.to_string(),
-        operations,
+    Ok(ImportedOpenApiProvider {
+        capabilities: CapabilityProvider {
+            id: provider_id.to_string(),
+            operations,
+        },
+        transport: OpenApiTransportProvider {
+            id: provider_id.to_string(),
+            operations: transport_operations,
+        },
     })
 }
 
@@ -126,7 +157,7 @@ fn import_get_operation(
     path: &str,
     method: &str,
     operation_id: &str,
-) -> Result<QueryOperation, String> {
+) -> Result<(QueryOperation, OpenApiGetTransport), String> {
     let operation = paths
         .get(path)
         .and_then(Value::as_object)
@@ -137,11 +168,17 @@ fn import_get_operation(
     let parameters = import_parameters(operation)?;
     let output = import_success_output(raw, operation)?;
 
-    Ok(QueryOperation {
-        external_id: operation_id.to_string(),
-        parameters,
-        output,
-    })
+    Ok((
+        QueryOperation {
+            external_id: operation_id.to_string(),
+            parameters: parameters.clone(),
+            output,
+        },
+        OpenApiGetTransport {
+            path: path.to_string(),
+            parameters,
+        },
+    ))
 }
 
 fn import_parameters(operation: &Map<String, Value>) -> Result<Vec<OperationParameter>, String> {
@@ -177,8 +214,10 @@ fn import_parameters(operation: &Map<String, Value>) -> Result<Vec<OperationPara
             }
             None => return Err(format!("parameter `{name}` is missing `in`")),
         };
-        if !seen.insert((name.to_string(), location)) {
-            return Err(format!("duplicate parameter `{name}`"));
+        if !seen.insert(name.to_string()) {
+            return Err(format!(
+                "duplicate parameter name `{name}` is ambiguous in the G0 binding model"
+            ));
         }
 
         if parameter.get("content").is_some() {
@@ -442,12 +481,25 @@ mod tests {
         let provider =
             import_openapi_provider("crm", &SourceId::new("crm.json"), CONTRACT).expect("contract");
 
-        let operation = provider.operations.get("getCustomer").expect("operation");
+        let operation = provider
+            .capabilities
+            .operations
+            .get("getCustomer")
+            .expect("operation");
         assert_eq!(operation.parameters[0].location, ParameterLocation::Path);
         assert!(operation.parameters[0].required);
         assert!(matches!(operation.output.kind, ValueKind::Object(_)));
         assert!(operation.output.supports_path(["name"]));
         assert!(operation.output.supports_path(["phone"]));
+        assert_eq!(
+            provider
+                .transport
+                .operations
+                .get("getCustomer")
+                .expect("transport")
+                .path,
+            "/customers/{customerId}"
+        );
     }
 
     #[test]
