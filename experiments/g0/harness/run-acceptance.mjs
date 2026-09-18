@@ -158,6 +158,7 @@ async function main() {
       task: { type: "string" },
       trace: { type: "string" },
       repo: { type: "string" },
+      preflight: { type: "boolean", default: false },
     },
   });
 
@@ -169,10 +170,12 @@ async function main() {
   if (!["B_FULL", "C_UIKO", "R_RENDER_ONLY", "T_AUTHORING"].includes(values.arm)) {
     throw new Error(`unsupported G0 arm ${values.arm}`);
   }
-  if (
+  const unregisteredProbeTask =
     ["R_RENDER_ONLY", "T_AUTHORING"].includes(values.arm) &&
-    !["G0-D01", "G0-D02", "G0-D05"].includes(values.task)
-  ) {
+    !["G0-D01", "G0-D02", "G0-D05"].includes(values.task);
+  const allowedPrerequisiteCheck =
+    values.preflight === true && values.task === "G0-D03";
+  if (unregisteredProbeTask && !allowedPrerequisiteCheck) {
     throw new Error(`task ${values.task} is not registered for ${values.arm}`);
   }
   if (!(values.task in EXPECTED_CRITERIA)) {
