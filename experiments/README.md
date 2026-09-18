@@ -15,6 +15,7 @@ The first G0 experiment definition is frozen as `g0-v1`:
 - `g0/run-template.json` — result skeleton;
 - `tasks/dev-manifest.json` — six pre-registered G0 development tasks;
 - `fixtures/g0-support-api.openapi.json` — shared read-only API contract;
+- `fixtures/compiler-support-console/` — harness-owned regression fixture for compiler/renderer/runtime CI; never a measured arm base;
 - `../baselines/b-full/stack-lock.json` — exact conventional baseline versions.
 
 Primary durable task-level measures for G0/final evaluation:
