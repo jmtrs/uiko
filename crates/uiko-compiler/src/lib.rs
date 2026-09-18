@@ -4,10 +4,12 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use uiko_capabilities::{CapabilityCatalog, QueryOperation};
 use uiko_core::{
-    AppIr, ComponentIr, ComponentKindIr, Diagnostic, Located, ModuleIr, PageIr, QueryInputIr,
-    QueryIr, Severity,
+    AppIr, ComponentIr, ComponentKindIr, Diagnostic, Located, ModuleIr, PageIr, PageStateIr,
+    QueryInputIr, QueryIr, SelectOptionIr, Severity, StateValueIr,
 };
-use uiko_source::{AppSource, ComponentKindSource, ComponentSource, PageSource, QuerySource};
+use uiko_source::{
+    AppSource, ComponentKindSource, ComponentSource, PageSource, QuerySource, StateValueSource,
+};
 
 pub const SUPPORTED_SPEC_VERSION: u32 = 1;
 
@@ -58,6 +60,20 @@ pub fn compile(
                     ),
                     page.value.id.span.clone(),
                 ));
+            }
+
+            let mut state_ids = BTreeSet::new();
+            for state in &page.value.state {
+                if !state_ids.insert(state.value.id.value.clone()) {
+                    diagnostics.push(Diagnostic::error(
+                        "UIKO1104",
+                        format!(
+                            "duplicate state `{}` in page `{}`",
+                            state.value.id.value, page.value.id.value
+                        ),
+                        state.value.id.span.clone(),
+                    ));
+                }
             }
 
             let mut component_ids = BTreeSet::new();
@@ -112,6 +128,11 @@ fn lower_page(
     capabilities: &CapabilityCatalog,
 ) -> Result<PageIr, Vec<Diagnostic>> {
     let route_parameters = route_parameters(&page.route.value);
+    let page_state: BTreeMap<_, _> = page
+        .state
+        .iter()
+        .map(|state| (state.value.id.value.clone(), &state.value.initial))
+        .collect();
     let mut diagnostics = Vec::new();
     let mut query_aliases = BTreeMap::<String, &QueryOperation>::new();
     let mut queries = Vec::with_capacity(page.queries.len());
@@ -158,7 +179,8 @@ fn lower_page(
             continue;
         };
 
-        let query_diagnostics = validate_query_input(&query.value, operation, &route_parameters);
+        let query_diagnostics =
+            validate_query_input(&query.value, operation, &route_parameters, &page_state);
         if !query_diagnostics.is_empty() {
             diagnostics.extend(query_diagnostics);
             continue;
@@ -188,15 +210,54 @@ fn lower_page(
     }
 
     for component in &page.components {
-        let binding = match &component.value.kind {
-            ComponentKindSource::Field { binding, .. } | ComponentKindSource::Table { binding } => {
-                Some(binding.as_str())
+        match &component.value.kind {
+            ComponentKindSource::Text { .. } => {}
+            ComponentKindSource::Field { binding, .. }
+            | ComponentKindSource::Table { binding } => {
+                validate_component_binding(
+                    binding,
+                    &query_aliases,
+                    &component.span,
+                    &mut diagnostics,
+                );
             }
-            ComponentKindSource::Text { .. } => None,
-        };
-
-        if let Some(binding) = binding {
-            validate_component_binding(binding, &query_aliases, &component.span, &mut diagnostics);
+            ComponentKindSource::Select { state, .. } => {
+                if !page_state.contains_key(state) {
+                    diagnostics.push(Diagnostic::error(
+                        "UIKO2112",
+                        format!("Select references unknown page state `{state}`"),
+                        component.span.clone(),
+                    ));
+                }
+            }
+            ComponentKindSource::Pagination {
+                state,
+                page_binding,
+                page_size_binding,
+                total_binding,
+            } => {
+                match page_state.get(state) {
+                    None => diagnostics.push(Diagnostic::error(
+                        "UIKO2112",
+                        format!("Pagination references unknown page state `{state}`"),
+                        component.span.clone(),
+                    )),
+                    Some(StateValueSource::Integer(_)) => {}
+                    Some(_) => diagnostics.push(Diagnostic::error(
+                        "UIKO2113",
+                        format!("Pagination state `{state}` must have an integer initial value"),
+                        component.span.clone(),
+                    )),
+                }
+                for binding in [page_binding, page_size_binding, total_binding] {
+                    validate_component_binding(
+                        binding,
+                        &query_aliases,
+                        &component.span,
+                        &mut diagnostics,
+                    );
+                }
+            }
         }
     }
 
@@ -207,6 +268,14 @@ fn lower_page(
     Ok(PageIr {
         id: page.id.value.clone(),
         route: page.route.value.clone(),
+        state: page
+            .state
+            .iter()
+            .map(|state| PageStateIr {
+                id: state.value.id.value.clone(),
+                initial: lower_state_value(&state.value.initial),
+            })
+            .collect(),
         queries,
         components: page
             .components
@@ -220,6 +289,7 @@ fn validate_query_input(
     query: &QuerySource,
     operation: &QueryOperation,
     route_parameters: &BTreeSet<String>,
+    page_state: &BTreeMap<String, &StateValueSource>,
 ) -> Vec<Diagnostic> {
     let mut diagnostics = Vec::new();
     let mut supplied = BTreeSet::new();
@@ -248,19 +318,28 @@ fn validate_query_input(
         }
 
         let expression = binding.value.expression.value.as_str();
-        let Some(route_parameter) = expression.strip_prefix("route.") else {
+        if let Some(route_parameter) = expression.strip_prefix("route.") {
+            if !route_parameters.contains(route_parameter) {
+                diagnostics.push(Diagnostic::error(
+                    "UIKO2107",
+                    format!("route has no parameter `{route_parameter}`"),
+                    binding.value.expression.span.clone(),
+                ));
+            }
+        } else if let Some(state_id) = expression.strip_prefix("state.") {
+            if !page_state.contains_key(state_id) {
+                diagnostics.push(Diagnostic::error(
+                    "UIKO2114",
+                    format!("page has no state `{state_id}`"),
+                    binding.value.expression.span.clone(),
+                ));
+            }
+        } else {
             diagnostics.push(Diagnostic::error(
                 "UIKO2106",
-                format!("M4 input binding `{expression}` is unsupported; expected route.<param>"),
-                binding.value.expression.span.clone(),
-            ));
-            continue;
-        };
-
-        if !route_parameters.contains(route_parameter) {
-            diagnostics.push(Diagnostic::error(
-                "UIKO2107",
-                format!("route has no parameter `{route_parameter}`"),
+                format!(
+                    "input binding `{expression}` is unsupported; expected route.<param> or state.<id>"
+                ),
                 binding.value.expression.span.clone(),
             ));
         }
@@ -339,14 +418,53 @@ fn lower_component(component: &ComponentSource) -> ComponentIr {
             ComponentKindSource::Text { value } => ComponentKindIr::Text {
                 value: value.clone(),
             },
-            ComponentKindSource::Field { label, binding } => ComponentKindIr::Field {
+            ComponentKindSource::Field {
+                label,
+                binding,
+                fallback,
+            } => ComponentKindIr::Field {
                 label: label.clone(),
                 binding: binding.clone(),
+                fallback: fallback.clone(),
             },
             ComponentKindSource::Table { binding } => ComponentKindIr::Table {
                 binding: binding.clone(),
             },
+            ComponentKindSource::Select {
+                label,
+                state,
+                options,
+            } => ComponentKindIr::Select {
+                label: label.clone(),
+                state: state.clone(),
+                options: options
+                    .iter()
+                    .map(|option| SelectOptionIr {
+                        label: option.label.clone(),
+                        value: lower_state_value(&option.value),
+                    })
+                    .collect(),
+            },
+            ComponentKindSource::Pagination {
+                state,
+                page_binding,
+                page_size_binding,
+                total_binding,
+            } => ComponentKindIr::Pagination {
+                state: state.clone(),
+                page_binding: page_binding.clone(),
+                page_size_binding: page_size_binding.clone(),
+                total_binding: total_binding.clone(),
+            },
         },
+    }
+}
+
+fn lower_state_value(value: &StateValueSource) -> StateValueIr {
+    match value {
+        StateValueSource::String(value) => StateValueIr::String(value.clone()),
+        StateValueSource::Integer(value) => StateValueIr::Integer(*value),
+        StateValueSource::Null => StateValueIr::Null,
     }
 }
 
@@ -424,6 +542,7 @@ mod tests {
                                     "/customers/:customerId".into(),
                                     "features/customers/detail.jsonc",
                                 ),
+                                state: Vec::new(),
                                 queries: vec![at(
                                     QuerySource {
                                         id: at(
@@ -456,6 +575,7 @@ mod tests {
                                         kind: ComponentKindSource::Field {
                                             label: "Name".into(),
                                             binding: "customer.name".into(),
+                                            fallback: None,
                                         },
                                     },
                                     "features/customers/detail.jsonc",
@@ -523,6 +643,7 @@ mod tests {
             .kind = ComponentKindSource::Field {
             label: "Broken".into(),
             binding: "customer.missing".into(),
+            fallback: None,
         };
 
         let diagnostics = compile(&source, &catalog()).unwrap_err();
