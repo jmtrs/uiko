@@ -1,0 +1,23 @@
+[workspace]
+resolver = "2"
+members = [
+  "crates/uiko-core",
+  "crates/uiko-source",
+  "crates/uiko-compiler",
+  "crates/uiko-cli",
+]
+
+[workspace.package]
+version = "0.0.1"
+edition = "2024"
+rust-version = "1.85"
+license = "UNLICENSED"
+authors = ["uiko contributors"]
+repository = "https://github.com/jmtrs/uiko"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }

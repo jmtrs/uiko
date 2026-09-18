@@ -1,0 +1,13 @@
+[package]
+name = "uiko-cli"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "uiko"
+path = "src/main.rs"
+
+[lints]
+workspace = true

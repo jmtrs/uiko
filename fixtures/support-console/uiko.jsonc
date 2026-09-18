@@ -1,0 +1,6 @@
+{
+  // Minimal fixture shape. The JSONC adapter is intentionally not implemented yet.
+  "name": "support-console",
+  "specVersion": 1,
+  "modules": ["./features/customers"]
+}

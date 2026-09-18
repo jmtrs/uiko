@@ -1,0 +1,8 @@
+{
+  "id": "CustomerList",
+  "route": "/customers",
+  "components": [
+    { "type": "Text", "value": "Customers" },
+    { "type": "Table", "binding": "customers" }
+  ]
+}

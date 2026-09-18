@@ -1,0 +1,12 @@
+/target/
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.tmp
+node_modules/
+dist/
+coverage/
+.env
+.env.*
+!.env.example

@@ -1,0 +1,35 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  rust:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - name: Format
+        run: cargo fmt --check
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+      - name: Test
+        run: cargo test --workspace --locked
+
+  repository-invariants:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Architecture spec is present
+        run: test -f docs/architecture/uiko_Product_Technical_Architecture_PoC_v0.16.md
+      - name: Hold-out tasks are not committed in plaintext task files
+        run: |
+          test ! -d experiments/tasks/holdout || \
+            ! find experiments/tasks/holdout -type f -name '*.json' -o -name '*.md' | grep -q .

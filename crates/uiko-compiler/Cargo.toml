@@ -1,0 +1,13 @@
+[package]
+name = "uiko-compiler"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+uiko-core = { path = "../uiko-core" }
+uiko-source = { path = "../uiko-source" }
+
+[lints]
+workspace = true
