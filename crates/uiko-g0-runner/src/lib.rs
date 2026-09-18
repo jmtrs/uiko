@@ -1262,13 +1262,13 @@ mod tests {
             base_revision,
             started_unix_ms,
             ..
-        } = event.payload
+        } = &event.payload
         else {
             panic!("expected run_start");
         };
 
         assert_eq!(base_revision, "0123456789abcdef");
-        assert_eq!(started_unix_ms, 1000);
+        assert_eq!(*started_unix_ms, 1000);
         let serialized = serde_json::to_value(event).expect("serialize trace event");
         assert_eq!(serialized["baseRevision"], "0123456789abcdef");
         assert_eq!(serialized["startedUnixMs"], 1000);
