@@ -13,6 +13,7 @@ import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 
 import { validateReview } from "./finalize-run.mjs";
+import { validateExperimentLock } from "./run-g0.mjs";
 import {
   buildCodexArgs,
   diffSnapshots,
@@ -300,6 +301,68 @@ process.stdout.write("not-json\\n");
         ],
       }),
     /exceeds the 1 possible repair iteration/,
+  );
+
+  const adapterLock = { codexCli: { version: "0.155.0" } };
+  const prerequisiteManifest = {
+    taskBases: {
+      B_FULL: {
+        "G0-D03": "D01",
+      },
+    },
+  };
+  const experimentLock = {
+    schemaVersion: 1,
+    status: "frozen-g0-v1",
+    agent: {
+      codexCliVersion: "0.155.0",
+      model: "smoke-model",
+      reasoningEffort: "high",
+    },
+    taskBases: {
+      B_FULL: {
+        "G0-D03": "base-sha",
+      },
+    },
+    predecessorAcceptance: {
+      B_FULL: {
+        "G0-D03": {
+          baseRevision: "base-sha",
+          predecessorTask: "G0-D01",
+          passed: true,
+        },
+      },
+    },
+  };
+  assert.doesNotThrow(() =>
+    validateExperimentLock(
+      experimentLock,
+      adapterLock,
+      prerequisiteManifest,
+      "B_FULL",
+      "G0-D03",
+    ),
+  );
+  assert.throws(
+    () =>
+      validateExperimentLock(
+        {
+          ...experimentLock,
+          predecessorAcceptance: {
+            B_FULL: {
+              "G0-D03": {
+                ...experimentLock.predecessorAcceptance.B_FULL["G0-D03"],
+                baseRevision: "different-base",
+              },
+            },
+          },
+        },
+        adapterLock,
+        prerequisiteManifest,
+        "B_FULL",
+        "G0-D03",
+      ),
+    /no valid predecessor acceptance proof/,
   );
 
   process.stdout.write("Codex G0 adapter smoke passed\n");
