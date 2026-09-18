@@ -133,6 +133,51 @@ fn lower_page(
         .iter()
         .map(|state| (state.value.id.value.clone(), &state.value.initial))
         .collect();
+
+    let (queries, query_aliases, mut diagnostics) = lower_queries(
+        module_id,
+        page,
+        capabilities,
+        &route_parameters,
+        &page_state,
+    );
+    diagnostics.extend(validate_components(page, &query_aliases, &page_state));
+
+    if !diagnostics.is_empty() {
+        return Err(diagnostics);
+    }
+
+    Ok(PageIr {
+        id: page.id.value.clone(),
+        route: page.route.value.clone(),
+        state: page
+            .state
+            .iter()
+            .map(|state| PageStateIr {
+                id: state.value.id.value.clone(),
+                initial: lower_state_value(&state.value.initial),
+            })
+            .collect(),
+        queries,
+        components: page
+            .components
+            .iter()
+            .map(|component| lower_component(&component.value))
+            .collect(),
+    })
+}
+
+fn lower_queries<'a>(
+    module_id: &str,
+    page: &PageSource,
+    capabilities: &'a CapabilityCatalog,
+    route_parameters: &BTreeSet<String>,
+    page_state: &BTreeMap<String, &StateValueSource>,
+) -> (
+    Vec<QueryIr>,
+    BTreeMap<String, &'a QueryOperation>,
+    Vec<Diagnostic>,
+) {
     let mut diagnostics = Vec::new();
     let mut query_aliases = BTreeMap::<String, &QueryOperation>::new();
     let mut queries = Vec::with_capacity(page.queries.len());
@@ -180,18 +225,17 @@ fn lower_page(
         };
 
         let query_diagnostics =
-            validate_query_input(&query.value, operation, &route_parameters, &page_state);
+            validate_query_input(&query.value, operation, route_parameters, page_state);
         if !query_diagnostics.is_empty() {
             diagnostics.extend(query_diagnostics);
             continue;
         }
 
-        let logical_id = format!(
-            "{module_id}.{}.query.{}",
-            page.id.value, query.value.id.value
-        );
         queries.push(QueryIr {
-            id: logical_id,
+            id: format!(
+                "{module_id}.{}.query.{}",
+                page.id.value, query.value.id.value
+            ),
             alias: query.value.id.value.clone(),
             provider_id: provider_id.to_string(),
             external_operation_id: operation_id.to_string(),
@@ -209,13 +253,23 @@ fn lower_page(
         query_aliases.insert(query.value.id.value.clone(), operation);
     }
 
+    (queries, query_aliases, diagnostics)
+}
+
+fn validate_components(
+    page: &PageSource,
+    query_aliases: &BTreeMap<String, &QueryOperation>,
+    page_state: &BTreeMap<String, &StateValueSource>,
+) -> Vec<Diagnostic> {
+    let mut diagnostics = Vec::new();
+
     for component in &page.components {
         match &component.value.kind {
             ComponentKindSource::Text { .. } => {}
             ComponentKindSource::Field { binding, .. } | ComponentKindSource::Table { binding } => {
                 validate_component_binding(
                     binding,
-                    &query_aliases,
+                    query_aliases,
                     &component.span,
                     &mut diagnostics,
                 );
@@ -251,7 +305,7 @@ fn lower_page(
                 for binding in [page_binding, page_size_binding, total_binding] {
                     validate_component_binding(
                         binding,
-                        &query_aliases,
+                        query_aliases,
                         &component.span,
                         &mut diagnostics,
                     );
@@ -260,28 +314,7 @@ fn lower_page(
         }
     }
 
-    if !diagnostics.is_empty() {
-        return Err(diagnostics);
-    }
-
-    Ok(PageIr {
-        id: page.id.value.clone(),
-        route: page.route.value.clone(),
-        state: page
-            .state
-            .iter()
-            .map(|state| PageStateIr {
-                id: state.value.id.value.clone(),
-                initial: lower_state_value(&state.value.initial),
-            })
-            .collect(),
-        queries,
-        components: page
-            .components
-            .iter()
-            .map(|component| lower_component(&component.value))
-            .collect(),
-    })
+    diagnostics
 }
 
 fn validate_query_input(
