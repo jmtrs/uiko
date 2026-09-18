@@ -197,7 +197,11 @@ fn build_upstream_url(
         })?;
         segments.pop_if_empty();
 
-        for template_segment in operation.path.split('/').filter(|segment| !segment.is_empty()) {
+        for template_segment in operation
+            .path
+            .split('/')
+            .filter(|segment| !segment.is_empty())
+        {
             if let Some(name) = template_segment
                 .strip_prefix('{')
                 .and_then(|segment| segment.strip_suffix('}'))
@@ -290,11 +294,7 @@ impl IntoResponse for GatewayError {
 mod tests {
     use std::collections::BTreeMap;
 
-    use axum::{
-        Json, Router,
-        extract::Path,
-        routing::get,
-    };
+    use axum::{Json, Router, extract::Path, routing::get};
     use serde_json::json;
     use tokio::net::TcpListener;
     use uiko_capabilities::{OperationParameter, ParameterLocation};
