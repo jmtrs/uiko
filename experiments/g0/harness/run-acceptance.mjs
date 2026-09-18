@@ -163,10 +163,10 @@ async function main() {
 
   if (values.arm === undefined || values.task === undefined) {
     throw new Error(
-      "usage: node run-acceptance.mjs --arm B_FULL|C_UIKO --task G0-D01 [--trace TRACE]",
+      "usage: node run-acceptance.mjs --arm B_FULL|C_UIKO|R_RENDER_ONLY|T_AUTHORING --task G0-D01 [--trace TRACE]",
     );
   }
-  if (!["B_FULL", "C_UIKO"].includes(values.arm)) {
+  if (!["B_FULL", "C_UIKO", "R_RENDER_ONLY", "T_AUTHORING"].includes(values.arm)) {
     throw new Error(`unsupported primary arm ${values.arm}`);
   }
   if (!(values.task in EXPECTED_CRITERIA)) {
