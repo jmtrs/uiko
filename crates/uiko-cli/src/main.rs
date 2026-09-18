@@ -18,7 +18,10 @@ fn main() -> ExitCode {
             println!("uiko {}", env!("CARGO_PKG_VERSION"));
             ExitCode::SUCCESS
         }
-        Some("validate") => validate(args.collect()),
+        Some("validate") => {
+            let validate_args: Vec<_> = args.collect();
+            validate(&validate_args)
+        },
         Some(command) => {
             eprintln!("UIKO0001: unknown command `{command}`");
             ExitCode::from(2)
@@ -26,7 +29,7 @@ fn main() -> ExitCode {
     }
 }
 
-fn validate(args: Vec<String>) -> ExitCode {
+fn validate(args: &[String]) -> ExitCode {
     let mut project = PathBuf::from(".");
     let mut project_set = false;
     let mut json = false;
