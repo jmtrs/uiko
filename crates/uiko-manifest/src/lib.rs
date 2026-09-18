@@ -211,12 +211,8 @@ impl UiManifest {
                 .expect("writing to String cannot fail");
             writeln!(output, "      \"state\": {{").expect("writing to String cannot fail");
             for (index, state) in route.state.iter().enumerate() {
-                write!(
-                    output,
-                    "        \"{}\": ",
-                    json_escape(&state.id),
-                )
-                .expect("writing to String cannot fail");
+                write!(output, "        \"{}\": ", json_escape(&state.id),)
+                    .expect("writing to String cannot fail");
                 write_scalar(&mut output, &state.initial);
                 if index + 1 < route.state.len() {
                     output.push(',');
