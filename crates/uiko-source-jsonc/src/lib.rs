@@ -834,6 +834,55 @@ mod tests {
     }
 
     #[test]
+    fn g0_state_select_pagination_and_fallback_parse() {
+        let page = r#"{
+  "id": "CustomerList",
+  "route": "/customers",
+  "state": { "status": null, "page": 1 },
+  "queries": {
+    "customers": {
+      "operation": "crm.listCustomers",
+      "input": { "status": "state.status", "page": "state.page" }
+    }
+  },
+  "components": [
+    {
+      "id": "status",
+      "type": "Select",
+      "label": "Status",
+      "state": "status",
+      "options": [
+        { "label": "All", "value": null },
+        { "label": "Active", "value": "active" }
+      ]
+    },
+    {
+      "id": "pager",
+      "type": "Pagination",
+      "state": "page",
+      "page": "customers.page",
+      "pageSize": "customers.pageSize",
+      "total": "customers.total"
+    },
+    {
+      "id": "phone",
+      "type": "Field",
+      "label": "Phone",
+      "binding": "customers.phone",
+      "fallback": "Not provided"
+    }
+  ]
+}"#;
+
+        let page = parse_page(&SourceId::new("customers/list.jsonc"), page)
+            .expect("G0 interaction page should parse");
+
+        assert_eq!(page.value.state.len(), 2);
+        assert_eq!(page.value.queries[0].value.input.len(), 2);
+        assert_eq!(page.value.components.len(), 3);
+    }
+
+    #[test]
     fn unsupported_component_fails_closed() {
         let page = r#"{
   "id": "Broken",
