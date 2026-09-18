@@ -375,13 +375,29 @@ async function visibleTexts(page, texts) {
 }
 
 async function measuredSourceText(repoRoot, arm) {
-  const roots =
-    arm === "B_FULL"
-      ? [join(repoRoot, "baselines/b-full/src")]
-      : [
-          join(repoRoot, "fixtures/support-console/uiko.jsonc"),
-          join(repoRoot, "fixtures/support-console/features"),
-        ];
+  let roots;
+  switch (arm) {
+    case "B_FULL":
+      roots = [join(repoRoot, "baselines/b-full/src")];
+      break;
+    case "C_UIKO":
+      roots = [
+        join(repoRoot, "fixtures/support-console/uiko.jsonc"),
+        join(repoRoot, "fixtures/support-console/features"),
+      ];
+      break;
+    case "R_RENDER_ONLY":
+      roots = [
+        join(repoRoot, "experiments/controls/r-render-only/src"),
+        join(repoRoot, "experiments/controls/r-render-only/ui"),
+      ];
+      break;
+    case "T_AUTHORING":
+      roots = [join(repoRoot, "experiments/controls/t-authoring/src")];
+      break;
+    default:
+      throw new Error(`unsupported measured source arm ${arm}`);
+  }
   const files = [];
   for (const root of roots) {
     try {
