@@ -16,12 +16,8 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
-      - name: Resolve M4 dependency lock (temporary branch step)
-        run: |
-          cargo generate-lockfile
-          echo '---BEGIN-CARGO-LOCK---'
-          cat Cargo.lock
-          echo '---END-CARGO-LOCK---'
+      - name: Lockfile is current
+        run: cargo metadata --locked --no-deps > /dev/null
       - name: Format
         run: cargo fmt --check
       - name: Clippy
