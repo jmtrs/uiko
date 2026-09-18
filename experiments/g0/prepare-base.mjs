@@ -198,20 +198,6 @@ function stageExecutionInputs(repoRoot, arm) {
   }
 }
 
-function gitPathIsTracked(repoRoot, path) {
-  const result = spawnSync("git", ["ls-files", "--error-unmatch", "--", path], {
-    cwd: repoRoot,
-    stdio: "ignore",
-  });
-  if (result.status === 0) {
-    return true;
-  }
-  if (result.status === 1) {
-    return false;
-  }
-  throw new Error(`cannot determine whether ${path} is tracked`);
-}
-
 function requireClean(repoRoot) {
   const status = runCapture(
     "git",
