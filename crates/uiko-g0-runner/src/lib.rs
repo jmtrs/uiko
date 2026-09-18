@@ -469,11 +469,7 @@ pub fn aggregate_run(
 
     verify_git_revision(&repo_root, &identity.start.base_revision)?;
 
-    let mut state = AggregationState::new(
-        &repo_root,
-        &identity.start.base_revision,
-        &classifier,
-    );
+    let mut state = AggregationState::new(&repo_root, &identity.start.base_revision, &classifier);
     for event in &events {
         state.process_event(event)?;
     }
@@ -529,11 +525,7 @@ struct AggregationState<'a> {
 }
 
 impl<'a> AggregationState<'a> {
-    fn new(
-        repo_root: &'a Path,
-        base_revision: &'a str,
-        classifier: &'a PathClassifier,
-    ) -> Self {
+    fn new(repo_root: &'a Path, base_revision: &'a str, classifier: &'a PathClassifier) -> Self {
         Self {
             repo_root,
             base_revision,
@@ -651,10 +643,8 @@ impl<'a> AggregationState<'a> {
         }
 
         let path_class = self.classifier.classify(&path);
-        let inserted = inserted_token_count(
-            before_text.unwrap_or(""),
-            after_text.unwrap_or(""),
-        ) as u64;
+        let inserted =
+            inserted_token_count(before_text.unwrap_or(""), after_text.unwrap_or("")) as u64;
         self.account_edit(path_class, &path, sequence, inserted);
 
         self.edit_trace.push(EditTraceResult {
@@ -666,18 +656,11 @@ impl<'a> AggregationState<'a> {
             after_sha256: after_text.map(sha256_hex),
             inserted_tokens: inserted,
         });
-        self.last_after
-            .insert(path, after_text.map(str::to_string));
+        self.last_after.insert(path, after_text.map(str::to_string));
         Ok(())
     }
 
-    fn account_edit(
-        &mut self,
-        path_class: PathClass,
-        path: &str,
-        sequence: u64,
-        inserted: u64,
-    ) {
+    fn account_edit(&mut self, path_class: PathClass, path: &str, sequence: u64, inserted: u64) {
         match path_class {
             PathClass::Application => {
                 self.cumulative_authored += inserted;
