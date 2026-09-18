@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "status": "frozen-g0-v1",
+  "verifiedAt": "2026-09-18",
+  "codexCli": {
+    "version": "0.155.0",
+    "releaseTag": "rust-v0.155.0"
+  },
+  "execution": {
+    "jsonLines": true,
+    "ephemeral": true,
+    "ignoreUserConfig": true,
+    "ignoreRules": true,
+    "sandbox": "workspace-write",
+    "approvalPolicy": "never",
+    "agentsEnabled": false,
+    "unifiedExec": false
+  },
+  "budget": {
+    "maxAgentTurns": 4,
+    "maxWallClockMinutes": 30
+  },
+  "model": {
+    "source": "experiment-lock",
+    "required": true
+  }
+}
