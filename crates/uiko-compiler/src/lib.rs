@@ -2,9 +2,7 @@
 
 use std::collections::BTreeSet;
 
-use uiko_core::{
-    AppIr, ComponentIr, Diagnostic, Located, ModuleIr, PageIr, Severity,
-};
+use uiko_core::{AppIr, ComponentIr, Diagnostic, Located, ModuleIr, PageIr, Severity};
 use uiko_source::{AppSource, ComponentSource, PageSource};
 
 pub const SUPPORTED_SPEC_VERSION: u32 = 1;
@@ -112,7 +110,7 @@ mod tests {
     use uiko_core::{Located, ModuleId, SourceId, TextSpan};
     use uiko_source::{AppSource, ComponentSource, ModuleSource, PageSource};
 
-    use super::{compile, SUPPORTED_SPEC_VERSION};
+    use super::{SUPPORTED_SPEC_VERSION, compile};
 
     fn at<T>(value: T, source: &str) -> Located<T> {
         Located::new(value, TextSpan::new(SourceId::new(source), 0, 10))
@@ -128,14 +126,8 @@ mod tests {
                         id: at(ModuleId::new(id), "features/customers/module.jsonc"),
                         pages: vec![at(
                             PageSource {
-                                id: at(
-                                    "CustomerList".into(),
-                                    "features/customers/list.jsonc",
-                                ),
-                                route: at(
-                                    "/customers".into(),
-                                    "features/customers/list.jsonc",
-                                ),
+                                id: at("CustomerList".into(), "features/customers/list.jsonc"),
+                                route: at("/customers".into(), "features/customers/list.jsonc"),
                                 components: vec![at(
                                     ComponentSource::Text {
                                         value: "Customers".into(),
