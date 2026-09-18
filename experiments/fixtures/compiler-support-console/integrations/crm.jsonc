@@ -1,0 +1,5 @@
+{
+  "id": "crm",
+  "adapter": "uiko.openapi-http",
+  "contract": "./openapi/crm.json"
+}
