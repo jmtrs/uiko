@@ -624,9 +624,8 @@ fn parse_select_options(
         ));
         let label = parse_required_string(option, "label", source_id, diagnostics);
         let value_property = required_property(option, "value", source_id, diagnostics);
-        let scalar = value_property.and_then(|property| {
-            scalar_value(&property.value, source_id, diagnostics)
-        });
+        let scalar = value_property
+            .and_then(|property| scalar_value(&property.value, source_id, diagnostics));
         if let (Some(label), Some(value)) = (label, scalar) {
             result.push(SelectOptionSource {
                 label: label.value,
@@ -730,25 +729,13 @@ fn parse_component(
         "Pagination" => {
             diagnostics.extend(validate_properties(
                 object,
-                &[
-                    "id",
-                    "type",
-                    "pageState",
-                    "page",
-                    "pageSize",
-                    "total",
-                ],
+                &["id", "type", "pageState", "page", "pageSize", "total"],
                 "Pagination component",
                 source_id,
             ));
             ComponentKindSource::Pagination {
-                page_state: parse_required_string(
-                    object,
-                    "pageState",
-                    source_id,
-                    diagnostics,
-                )?
-                .value,
+                page_state: parse_required_string(object, "pageState", source_id, diagnostics)?
+                    .value,
                 page_binding: parse_required_string(object, "page", source_id, diagnostics)?.value,
                 page_size_binding: parse_required_string(
                     object,
@@ -757,7 +744,8 @@ fn parse_component(
                     diagnostics,
                 )?
                 .value,
-                total_binding: parse_required_string(object, "total", source_id, diagnostics)?.value,
+                total_binding: parse_required_string(object, "total", source_id, diagnostics)?
+                    .value,
             }
         }
         other => {
