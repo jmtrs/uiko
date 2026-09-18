@@ -63,3 +63,15 @@ When `--trace` is present, the harness appends:
 - one final `validation` event for the acceptance invocation.
 
 A task passes only if every frozen criterion for that task was reached and passed.
+
+
+## Predecessor validation
+
+The pre-measurement experiment-lock freezer invokes this harness with
+`--prerequisite` against every non-empty predecessor base.
+
+For `R_RENDER_ONLY` and `T_AUTHORING`, that mode additionally permits
+`G0-D03` only so the canonical D03 predecessor of measured D05 can be checked
+with the same shared acceptance semantics. It does not register D03 as a
+measured mechanism-probe task; measured task registration remains frozen in
+`experiments/tasks/dev-manifest.json`.
