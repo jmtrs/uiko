@@ -54,6 +54,23 @@ jobs:
             and .app == "support-console"
             and (.routes | length) == 0
           ' /tmp/g0-c-uiko-base.uiko-manifest.json > /dev/null
+      - name: C_UIKO prerequisite bases compile deterministically
+        run: |
+          base="$(git rev-parse HEAD)"
+          first_d05=""
+          for task in G0-D03 G0-D04 G0-D05; do
+            git reset --hard --quiet "$base"
+            sha="$(bash experiments/g0/materialize-prerequisite-base.sh C_UIKO "$task" .)"
+            cargo run --quiet -p uiko-cli -- build fixtures/support-console \
+              --ui-manifest "/tmp/$task.uiko-manifest.json"
+            jq -e '(.routes | length) == 1' "/tmp/$task.uiko-manifest.json" > /dev/null
+            if [[ "$task" == "G0-D05" ]]; then
+              first_d05="$sha"
+            fi
+          done
+          git reset --hard --quiet "$base"
+          second_d05="$(bash experiments/g0/materialize-prerequisite-base.sh C_UIKO G0-D05 .)"
+          test "$first_d05" = "$second_d05"
 
   vue-host:
     runs-on: ubuntu-latest
@@ -96,6 +113,25 @@ jobs:
         run: npm run lint
       - name: Build
         run: npm run build
+      - name: B-full prerequisite bases typecheck deterministically
+        run: |
+          base="$(git rev-parse HEAD)"
+          first_d05=""
+          for task in G0-D03 G0-D04 G0-D05; do
+            git reset --hard --quiet "$base"
+            rm -f package-lock.json src/api/generated/schema.d.ts
+            sha="$(bash ../../experiments/g0/materialize-prerequisite-base.sh B_FULL "$task" ../..)"
+            npm run generate:api
+            npm run typecheck
+            npm run lint
+            if [[ "$task" == "G0-D05" ]]; then
+              first_d05="$sha"
+            fi
+          done
+          git reset --hard --quiet "$base"
+          rm -f package-lock.json src/api/generated/schema.d.ts
+          second_d05="$(bash ../../experiments/g0/materialize-prerequisite-base.sh B_FULL G0-D05 ../..)"
+          test "$first_d05" = "$second_d05"
 
   repository-invariants:
     runs-on: ubuntu-latest
@@ -115,11 +151,27 @@ jobs:
             experiments/tasks/dev-manifest.json \
             experiments/fixtures/g0-support-api.openapi.json \
             experiments/g0/path-policy.json \
+            experiments/g0/prerequisite-bases.json \
             experiments/g0/run-result.schema.json \
             experiments/g0/trace-event.schema.json \
             experiments/g0/run-template.json \
             hosts/vue/package.json \
             hosts/vue/tsconfig.json
+      - name: G0 prerequisite graph is explicit and materializer is valid shell
+        run: |
+          bash -n experiments/g0/materialize-prerequisite-base.sh
+          jq -e '
+            .schemaVersion == 1
+            and .taskBases.B_FULL["G0-D03"] == "D01"
+            and .taskBases.B_FULL["G0-D04"] == "D02"
+            and .taskBases.B_FULL["G0-D05"] == "D03"
+            and .taskBases.B_FULL["G0-D06"] == "D02"
+            and .taskBases.C_UIKO == .taskBases.B_FULL
+            and .taskBases.R_RENDER_ONLY["G0-D05"] == "D03"
+            and .taskBases.T_AUTHORING["G0-D05"] == "D03"
+            and (.templates.B_FULL | keys == ["D01","D02","D03"])
+            and (.templates.C_UIKO | keys == ["D01","D02","D03"])
+          ' experiments/g0/prerequisite-bases.json > /dev/null
       - name: G0 task set and probes are frozen
         run: |
           jq -e '
