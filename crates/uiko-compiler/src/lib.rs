@@ -2,12 +2,14 @@
 
 use std::collections::BTreeSet;
 
-use uiko_core::{AppIr, ComponentIr, Diagnostic, Located, ModuleIr, PageIr, Severity};
-use uiko_source::{AppSource, ComponentSource, PageSource};
+use uiko_core::{
+    AppIr, ComponentIr, ComponentKindIr, Diagnostic, Located, ModuleIr, PageIr, Severity,
+};
+use uiko_source::{AppSource, ComponentKindSource, ComponentSource, PageSource};
 
 pub const SUPPORTED_SPEC_VERSION: u32 = 1;
 
-/// Compile already-located source DTOs into the first canonical IR skeleton.
+/// Compile already-located source DTOs into canonical IR.
 ///
 /// Parsing and I/O intentionally live outside this pure semantic boundary.
 ///
@@ -51,6 +53,20 @@ pub fn compile(source: &Located<AppSource>) -> Result<AppIr, Vec<Diagnostic>> {
                     page.value.id.span.clone(),
                 ));
             }
+
+            let mut component_ids = BTreeSet::new();
+            for component in &page.value.components {
+                if !component_ids.insert(component.value.id.value.clone()) {
+                    diagnostics.push(Diagnostic::error(
+                        "UIKO1103",
+                        format!(
+                            "duplicate component `{}` in page `{}`",
+                            component.value.id.value, page.value.id.value
+                        ),
+                        component.value.id.span.clone(),
+                    ));
+                }
+            }
         }
     }
 
@@ -91,16 +107,19 @@ fn lower_page(page: &PageSource) -> PageIr {
 }
 
 fn lower_component(component: &ComponentSource) -> ComponentIr {
-    match component {
-        ComponentSource::Text { value } => ComponentIr::Text {
-            value: value.clone(),
-        },
-        ComponentSource::Field { label, binding } => ComponentIr::Field {
-            label: label.clone(),
-            binding: binding.clone(),
-        },
-        ComponentSource::Table { binding } => ComponentIr::Table {
-            binding: binding.clone(),
+    ComponentIr {
+        id: component.id.value.clone(),
+        kind: match &component.kind {
+            ComponentKindSource::Text { value } => ComponentKindIr::Text {
+                value: value.clone(),
+            },
+            ComponentKindSource::Field { label, binding } => ComponentKindIr::Field {
+                label: label.clone(),
+                binding: binding.clone(),
+            },
+            ComponentKindSource::Table { binding } => ComponentKindIr::Table {
+                binding: binding.clone(),
+            },
         },
     }
 }
@@ -108,7 +127,7 @@ fn lower_component(component: &ComponentSource) -> ComponentIr {
 #[cfg(test)]
 mod tests {
     use uiko_core::{Located, ModuleId, SourceId, TextSpan};
-    use uiko_source::{AppSource, ComponentSource, ModuleSource, PageSource};
+    use uiko_source::{AppSource, ComponentKindSource, ComponentSource, ModuleSource, PageSource};
 
     use super::{SUPPORTED_SPEC_VERSION, compile};
 
@@ -129,8 +148,11 @@ mod tests {
                                 id: at("CustomerList".into(), "features/customers/list.jsonc"),
                                 route: at("/customers".into(), "features/customers/list.jsonc"),
                                 components: vec![at(
-                                    ComponentSource::Text {
-                                        value: "Customers".into(),
+                                    ComponentSource {
+                                        id: at("title".into(), "features/customers/list.jsonc"),
+                                        kind: ComponentKindSource::Text {
+                                            value: "Customers".into(),
+                                        },
                                     },
                                     "features/customers/list.jsonc",
                                 )],
@@ -183,6 +205,23 @@ mod tests {
                 .unwrap_err()
                 .iter()
                 .any(|diagnostic| diagnostic.code == "UIKO1102")
+        );
+    }
+
+    #[test]
+    fn duplicate_component_fails_before_lowering() {
+        let mut app = app_with_module("customers");
+        let component = app.value.modules[0].value.pages[0].value.components[0].clone();
+        app.value.modules[0].value.pages[0]
+            .value
+            .components
+            .push(component);
+
+        assert!(
+            compile(&app)
+                .unwrap_err()
+                .iter()
+                .any(|diagnostic| diagnostic.code == "UIKO1103")
         );
     }
 }

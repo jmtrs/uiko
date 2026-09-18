@@ -55,6 +55,7 @@
       "coreOwned": [
         "crates/**",
         "docs/**",
+        "hosts/**",
         "Cargo.toml",
         "Cargo.lock",
         "rust-toolchain.toml"

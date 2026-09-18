@@ -2,7 +2,7 @@
   "id": "CustomerDetail",
   "route": "/customers/:customerId",
   "components": [
-    { "type": "Text", "value": "Customer" },
-    { "type": "Field", "label": "Name", "binding": "customer.name" }
+    { "id": "title", "type": "Text", "value": "Customer" },
+    { "id": "name", "type": "Field", "label": "Name", "binding": "customer.name" }
   ]
 }

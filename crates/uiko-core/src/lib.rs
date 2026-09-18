@@ -122,7 +122,13 @@ pub struct PageIr {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub enum ComponentIr {
+pub struct ComponentIr {
+    pub id: String,
+    pub kind: ComponentKindIr,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum ComponentKindIr {
     Text { value: String },
     Field { label: String, binding: String },
     Table { binding: String },
