@@ -1,0 +1,308 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://uiko.dev/schemas/g0-run-result-v1.json",
+  "title": "uiko G0 run result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "protocol",
+    "runId",
+    "taskId",
+    "arm",
+    "baseRevision",
+    "startedAt",
+    "endedAt",
+    "model",
+    "environment",
+    "outcome",
+    "metrics",
+    "repairs",
+    "acceptance",
+    "editTrace",
+    "protocolDeviations"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "protocol": {
+      "const": "g0-v1"
+    },
+    "runId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "taskId": {
+      "type": "string",
+      "pattern": "^G0-D0[1-6]$"
+    },
+    "arm": {
+      "enum": ["B_FULL", "C_UIKO", "R_RENDER_ONLY", "T_AUTHORING"]
+    },
+    "baseRevision": {
+      "type": "string",
+      "minLength": 7
+    },
+    "finalRevision": {
+      "type": ["string", "null"]
+    },
+    "startedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "endedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "model": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["provider", "model", "modelVersion", "agentHarness", "parameters"],
+      "properties": {
+        "provider": {
+          "type": "string"
+        },
+        "model": {
+          "type": "string"
+        },
+        "modelVersion": {
+          "type": "string"
+        },
+        "agentHarness": {
+          "type": "string"
+        },
+        "parameters": {
+          "type": "object"
+        },
+        "seed": {
+          "type": ["integer", "string", "null"]
+        }
+      }
+    },
+    "environment": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["os", "arch"],
+      "properties": {
+        "os": {
+          "type": "string"
+        },
+        "arch": {
+          "type": "string"
+        },
+        "node": {
+          "type": ["string", "null"]
+        },
+        "rustc": {
+          "type": ["string", "null"]
+        },
+        "browser": {
+          "type": ["string", "null"]
+        }
+      }
+    },
+    "outcome": {
+      "enum": ["accepted", "incomplete", "invalidated", "aborted"]
+    },
+    "metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "acceptedChangeTokens",
+        "cumulativeAuthoredEditTokens",
+        "nonApplicationEditTokens",
+        "filesTouched",
+        "repositoryReadOperations",
+        "repositorySearchOperations",
+        "editOperations",
+        "validationInvocations",
+        "browserInvocations",
+        "acceptanceLoopActions",
+        "wallClockMs",
+        "coreModification",
+        "generatedGlueTouched"
+      ],
+      "properties": {
+        "acceptedChangeTokens": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "cumulativeAuthoredEditTokens": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "nonApplicationEditTokens": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "filesTouched": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string"
+          }
+        },
+        "changedBytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "changedLines": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "repositoryReadOperations": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "repositorySearchOperations": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "editOperations": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "validationInvocations": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "browserInvocations": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "acceptanceLoopActions": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "providerInputTokens": {
+          "type": ["integer", "null"],
+          "minimum": 0
+        },
+        "providerOutputTokens": {
+          "type": ["integer", "null"],
+          "minimum": 0
+        },
+        "wallClockMs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "coreModification": {
+          "type": "boolean"
+        },
+        "generatedGlueTouched": {
+          "type": "boolean"
+        }
+      }
+    },
+    "repairs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["iteration", "category", "reason", "evidence"],
+        "properties": {
+          "iteration": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "category": {
+            "enum": ["LOCAL", "WIRING", "COHERENCE", "VISUAL_FIT", "ENVIRONMENT"]
+          },
+          "reason": {
+            "type": "string"
+          },
+          "evidence": {
+            "type": "string"
+          },
+          "sourcePaths": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "acceptance": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["criterionIndex", "passed", "evidence"],
+        "properties": {
+          "criterionIndex": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "passed": {
+            "type": "boolean"
+          },
+          "evidence": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "editTrace": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "sequence",
+          "path",
+          "pathClass",
+          "operation",
+          "beforeSha256",
+          "afterSha256",
+          "insertedTokens"
+        ],
+        "properties": {
+          "sequence": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "path": {
+            "type": "string"
+          },
+          "pathClass": {
+            "enum": ["application", "generated", "core", "harness", "other"]
+          },
+          "operation": {
+            "enum": ["create", "update", "delete"]
+          },
+          "beforeSha256": {
+            "type": ["string", "null"]
+          },
+          "afterSha256": {
+            "type": ["string", "null"]
+          },
+          "insertedTokens": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      }
+    },
+    "protocolDeviations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["code", "description", "impact"],
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "impact": {
+            "enum": ["none", "minor", "material", "invalidating"]
+          }
+        }
+      }
+    }
+  }
+}
