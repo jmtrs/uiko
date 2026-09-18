@@ -1,0 +1,14 @@
+[package]
+name = "uiko-runtime-plan"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+uiko-capabilities = { path = "../uiko-capabilities" }
+uiko-core = { path = "../uiko-core" }
+uiko-openapi = { path = "../uiko-openapi" }
+
+[lints]
+workspace = true
