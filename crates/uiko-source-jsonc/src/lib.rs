@@ -3,7 +3,7 @@
 use std::collections::BTreeSet;
 
 use jsonc_parser::{
-    ParseOptions,
+    CollectOptions, ParseOptions,
     ast::{Object, ObjectProp, Value},
     common::{Range, Ranged},
     parse_to_ast,
@@ -26,7 +26,7 @@ pub fn parse_app_config(
     text: &str,
 ) -> Result<Located<AppConfigSource>, Vec<Diagnostic>> {
     let parse_result =
-        parse_to_ast(text, &Default::default(), &parse_options()).map_err(|error| {
+        parse_to_ast(text, &CollectOptions::default(), &parse_options()).map_err(|error| {
             vec![Diagnostic::error(
                 "UIKO1000",
                 error.kind().to_string(),
@@ -61,14 +61,21 @@ pub fn parse_app_config(
         return Err(diagnostics);
     }
 
-    Ok(Located::new(
-        AppConfigSource {
-            name: name.expect("validated required field must exist"),
-            spec_version: spec_version.expect("validated required field must exist"),
-            modules: modules.expect("validated required field must exist"),
-        },
-        span(&source_id, object.range),
-    ))
+    match (name, spec_version, modules) {
+        (Some(name), Some(spec_version), Some(modules)) => Ok(Located::new(
+            AppConfigSource {
+                name,
+                spec_version,
+                modules,
+            },
+            span(&source_id, object.range),
+        )),
+        _ => Err(vec![Diagnostic::error(
+            "UIKO1099",
+            "source adapter could not construct a validated root model",
+            span(&source_id, object.range),
+        )]),
+    }
 }
 
 fn parse_options() -> ParseOptions {
@@ -116,9 +123,7 @@ fn parse_required_string(
     source_id: &SourceId,
     diagnostics: &mut Vec<Diagnostic>,
 ) -> Option<Located<String>> {
-    let Some(property) = required_property(object, field, source_id, diagnostics) else {
-        return None;
-    };
+    let property = required_property(object, field, source_id, diagnostics)?;
 
     match &property.value {
         Value::StringLit(value) => Some(Located::new(
@@ -144,9 +149,10 @@ fn parse_spec_version(
     let property = required_property(object, "specVersion", source_id, diagnostics)?;
 
     match &property.value {
-        Value::NumberLit(value) => match value.value.parse::<u32>() {
-            Ok(version) => Some(Located::new(version, span(source_id, value.range))),
-            Err(_) => {
+        Value::NumberLit(value) => {
+            if let Ok(version) = value.value.parse::<u32>() {
+                Some(Located::new(version, span(source_id, value.range)))
+            } else {
                 diagnostics.push(Diagnostic::error(
                     "UIKO1005",
                     "root property `specVersion` must be an unsigned integer",
@@ -154,7 +160,7 @@ fn parse_spec_version(
                 ));
                 None
             }
-        },
+        }
         value => {
             diagnostics.push(Diagnostic::error(
                 "UIKO1004",
