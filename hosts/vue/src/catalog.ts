@@ -1,8 +1,17 @@
 import { defineCatalog } from "@json-render/core";
-import { defineRegistry } from "@json-render/vue";
+import { defineRegistry, useStateStore } from "@json-render/vue";
 import { schema } from "@json-render/vue/schema";
 import { h } from "vue";
 import { z } from "zod";
+
+import { resolveRowBinding } from "./json-render-adapter";
+
+const scalarSchema = z.union([
+  z.string(),
+  z.number(),
+  z.boolean(),
+  z.null(),
+]);
 
 export const catalog = defineCatalog(schema, {
   components: {
@@ -33,8 +42,38 @@ export const catalog = defineCatalog(schema, {
         uikoId: z.string(),
         binding: z.string(),
         rows: z.array(z.unknown()),
+        columns: z.array(
+          z.object({
+            label: z.string(),
+            binding: z.string(),
+          }),
+        ),
       }),
-      description: "Generic table over a compiled list binding.",
+      description: "Table over a compiled list binding with optional explicit columns.",
+    },
+    Select: {
+      props: z.object({
+        uikoId: z.string(),
+        label: z.string(),
+        value: scalarSchema,
+        options: z.array(
+          z.object({
+            label: z.string(),
+            value: scalarSchema,
+          }),
+        ),
+      }),
+      description: "Select bound to one declared page-local state key.",
+    },
+    Pagination: {
+      props: z.object({
+        uikoId: z.string(),
+        pageValue: z.number(),
+        page: z.unknown(),
+        pageSize: z.unknown(),
+        total: z.unknown(),
+      }),
+      description: "Previous/Next controls over compiled page metadata.",
     },
   },
   actions: {},
@@ -73,19 +112,122 @@ export const { registry } = defineRegistry(catalog, {
           h("span", { "aria-live": "polite" }, formatValue(props.value)),
         ],
       ),
-    Table: ({ props }) => renderTable(props.uikoId, props.binding, props.rows),
+    Table: ({ props }) =>
+      renderTable(
+        props.uikoId,
+        props.binding,
+        props.rows,
+        props.columns,
+      ),
+    Select: ({ props, bindings }) => {
+      const { set } = useStateStore();
+      const selectedIndex = props.options.findIndex((option) =>
+        Object.is(option.value, props.value),
+      );
+
+      return h("label", { "data-uiko-id": props.uikoId }, [
+        h("span", null, props.label),
+        h(
+          "select",
+          {
+            "data-uiko-kind": "Select",
+            value: String(selectedIndex < 0 ? 0 : selectedIndex),
+            onChange: (event: Event) => {
+              const element = event.currentTarget;
+              if (!(element instanceof HTMLSelectElement)) {
+                return;
+              }
+              const option = props.options[element.selectedIndex];
+              const path = bindings?.value;
+              if (option !== undefined && path !== undefined) {
+                set(path, option.value);
+              }
+            },
+          },
+          props.options.map((option, index) =>
+            h(
+              "option",
+              {
+                value: String(index),
+                selected: index === selectedIndex,
+              },
+              option.label,
+            ),
+          ),
+        ),
+      ]);
+    },
+    Pagination: ({ props, bindings }) => {
+      const { set } = useStateStore();
+      const currentPage = numericValue(props.pageValue);
+      const responsePage = numericValue(props.page);
+      const pageSize = numericValue(props.pageSize);
+      const total = numericValue(props.total);
+      const pagePath = bindings?.pageValue;
+      const effectivePage = responsePage ?? currentPage ?? 1;
+      const previousDisabled = effectivePage <= 1;
+      const nextDisabled =
+        pageSize === null || total === null
+          ? true
+          : effectivePage * pageSize >= total;
+
+      const setPage = (nextPage: number): void => {
+        if (pagePath !== undefined) {
+          set(pagePath, nextPage);
+        }
+      };
+
+      return h(
+        "nav",
+        {
+          "data-uiko-id": props.uikoId,
+          "data-uiko-kind": "Pagination",
+          "aria-label": "Pagination",
+        },
+        [
+          h(
+            "button",
+            {
+              type: "button",
+              disabled: previousDisabled,
+              onClick: () => setPage(Math.max(1, effectivePage - 1)),
+            },
+            "Previous",
+          ),
+          h("span", { "aria-live": "polite" }, `Page ${effectivePage}`),
+          h(
+            "button",
+            {
+              type: "button",
+              disabled: nextDisabled,
+              onClick: () => setPage(effectivePage + 1),
+            },
+            "Next",
+          ),
+        ],
+      );
+    },
   },
 });
+
+interface TableColumn {
+  label: string;
+  binding: string;
+}
 
 function renderTable(
   uikoId: string,
   binding: string,
   rows: unknown[],
+  declaredColumns: TableColumn[],
 ): ReturnType<typeof h> {
   const records = rows.filter(isRecord);
-  const columns = Array.from(
-    new Set(records.flatMap((row) => Object.keys(row))),
-  );
+  const columns =
+    declaredColumns.length > 0
+      ? declaredColumns
+      : Array.from(
+          new Set(records.flatMap((row) => Object.keys(row))),
+        ).map((column) => ({ label: column, binding: column }));
 
   return h(
     "table",
@@ -102,7 +244,7 @@ function renderTable(
         h(
           "tr",
           null,
-          columns.map((column) => h("th", { scope: "col" }, column)),
+          columns.map((column) => h("th", { scope: "col" }, column.label)),
         ),
       ),
       h(
@@ -112,7 +254,9 @@ function renderTable(
           h(
             "tr",
             null,
-            columns.map((column) => h("td", null, formatValue(row[column]))),
+            columns.map((column) =>
+              h("td", null, formatValue(resolveRowBinding(row, column.binding))),
+            ),
           ),
         ),
       ),
@@ -122,6 +266,10 @@ function renderTable(
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function numericValue(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
 function formatValue(value: unknown): string {
