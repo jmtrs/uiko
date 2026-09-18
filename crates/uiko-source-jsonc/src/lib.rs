@@ -15,19 +15,24 @@ const APP_FIELDS: [&str; 3] = ["name", "specVersion", "modules"];
 const MODULE_FIELDS: [&str; 2] = ["id", "pages"];
 const PAGE_FIELDS: [&str; 3] = ["id", "route", "components"];
 
+/// Parse the root uiko project source into located, authoring-neutral DTOs.
+///
+/// # Errors
+///
+/// Returns stable diagnostics when JSONC syntax or the root source shape is invalid.
 pub fn parse_app_config(
-    source_id: SourceId,
+    source_id: &SourceId,
     text: &str,
 ) -> Result<Located<AppConfigSource>, Vec<Diagnostic>> {
-    let object = parse_root_object(&source_id, text)?;
-    let mut diagnostics = validate_properties(&object, &APP_FIELDS, "app", &source_id);
-    let name = parse_required_string(&object, "name", &source_id, &mut diagnostics);
-    let spec_version = parse_spec_version(&object, &source_id, &mut diagnostics);
-    let modules = parse_string_array(&object, "modules", &source_id, &mut diagnostics);
+    let object = parse_root_object(source_id, text)?;
+    let mut diagnostics = validate_properties(&object, &APP_FIELDS, "app", source_id);
+    let name = parse_required_string(&object, "name", source_id, &mut diagnostics);
+    let spec_version = parse_spec_version(&object, source_id, &mut diagnostics);
+    let modules = parse_string_array(&object, "modules", source_id, &mut diagnostics);
     finish(
         diagnostics,
         (name, spec_version, modules),
-        &source_id,
+        source_id,
         object.range,
         |(name, spec_version, modules)| {
             Some(AppConfigSource {
@@ -39,18 +44,23 @@ pub fn parse_app_config(
     )
 }
 
+/// Parse one module declaration.
+///
+/// # Errors
+///
+/// Returns stable diagnostics when JSONC syntax or the module shape is invalid.
 pub fn parse_module_config(
-    source_id: SourceId,
+    source_id: &SourceId,
     text: &str,
 ) -> Result<Located<ModuleConfigSource>, Vec<Diagnostic>> {
-    let object = parse_root_object(&source_id, text)?;
-    let mut diagnostics = validate_properties(&object, &MODULE_FIELDS, "module", &source_id);
-    let id = parse_required_string(&object, "id", &source_id, &mut diagnostics);
-    let pages = parse_string_array(&object, "pages", &source_id, &mut diagnostics);
+    let object = parse_root_object(source_id, text)?;
+    let mut diagnostics = validate_properties(&object, &MODULE_FIELDS, "module", source_id);
+    let id = parse_required_string(&object, "id", source_id, &mut diagnostics);
+    let pages = parse_string_array(&object, "pages", source_id, &mut diagnostics);
     finish(
         diagnostics,
         (id, pages),
-        &source_id,
+        source_id,
         object.range,
         |(id, pages)| {
             Some(ModuleConfigSource {
@@ -61,16 +71,21 @@ pub fn parse_module_config(
     )
 }
 
-pub fn parse_page(source_id: SourceId, text: &str) -> Result<Located<PageSource>, Vec<Diagnostic>> {
-    let object = parse_root_object(&source_id, text)?;
-    let mut diagnostics = validate_properties(&object, &PAGE_FIELDS, "page", &source_id);
-    let id = parse_required_string(&object, "id", &source_id, &mut diagnostics);
-    let route = parse_required_string(&object, "route", &source_id, &mut diagnostics);
-    let components = parse_components(&object, &source_id, &mut diagnostics);
+/// Parse one minimal page used by the pre-G0 compiler slice.
+///
+/// # Errors
+///
+/// Returns stable diagnostics for malformed pages or unsupported component shapes.
+pub fn parse_page(source_id: &SourceId, text: &str) -> Result<Located<PageSource>, Vec<Diagnostic>> {
+    let object = parse_root_object(source_id, text)?;
+    let mut diagnostics = validate_properties(&object, &PAGE_FIELDS, "page", source_id);
+    let id = parse_required_string(&object, "id", source_id, &mut diagnostics);
+    let route = parse_required_string(&object, "route", source_id, &mut diagnostics);
+    let components = parse_components(&object, source_id, &mut diagnostics);
     finish(
         diagnostics,
         (id, route, components),
-        &source_id,
+        source_id,
         object.range,
         |(id, route, components)| {
             Some(PageSource {
@@ -210,23 +225,22 @@ fn parse_spec_version(
     diagnostics: &mut Vec<Diagnostic>,
 ) -> Option<Located<u32>> {
     let property = required_property(object, "specVersion", source_id, diagnostics)?;
-    match &property.value {
-        Value::NumberLit(value) => match value.value.parse::<u32>() {
-            Ok(version) => Some(Located::new(version, span(source_id, value.range))),
-            Err(_) => {
-                diagnostics.push(Diagnostic::error(
-                    "UIKO1005",
-                    "property `specVersion` must be an unsigned integer",
-                    span(source_id, value.range),
-                ));
-                None
-            }
-        },
-        value => {
+    let Value::NumberLit(value) = &property.value else {
+        diagnostics.push(Diagnostic::error(
+            "UIKO1004",
+            "property `specVersion` must be a number",
+            span(source_id, property.value.range()),
+        ));
+        return None;
+    };
+
+    match value.value.parse::<u32>() {
+        Ok(version) => Some(Located::new(version, span(source_id, value.range))),
+        Err(_) => {
             diagnostics.push(Diagnostic::error(
-                "UIKO1004",
-                "property `specVersion` must be a number",
-                span(source_id, value.range()),
+                "UIKO1005",
+                "property `specVersion` must be an unsigned integer",
+                span(source_id, value.range),
             ));
             None
         }
@@ -388,11 +402,11 @@ mod tests {
   "specVersion": 1,
   "modules": ["./features/customers"],
 }"#;
-        assert!(parse_app_config(SourceId::new("uiko.jsonc"), valid).is_ok());
+        assert!(parse_app_config(&SourceId::new("uiko.jsonc"), valid).is_ok());
 
         let invalid = r#"{ name: "support-console", "specVersion": 1, "modules": [] }"#;
         assert_eq!(
-            parse_app_config(SourceId::new("uiko.jsonc"), invalid).unwrap_err()[0].code,
+            parse_app_config(&SourceId::new("uiko.jsonc"), invalid).unwrap_err()[0].code,
             "UIKO1000"
         );
     }
@@ -405,7 +419,7 @@ mod tests {
   "modules": ["./features/customers"]
 }"#;
         let parsed =
-            parse_app_config(SourceId::new("uiko.jsonc"), source).expect("valid app config");
+            parse_app_config(&SourceId::new("uiko.jsonc"), source).expect("valid app config");
 
         let name = &parsed.value.name.span;
         assert_eq!(&source[name.start..name.end], r#""support-console""#);
@@ -420,7 +434,7 @@ mod tests {
     fn unknown_and_duplicate_properties_fail_closed() {
         let unknown = r#"{ "name": "x", "specVersion": 1, "modules": [], "surprise": true }"#;
         assert!(
-            parse_app_config(SourceId::new("uiko.jsonc"), unknown)
+            parse_app_config(&SourceId::new("uiko.jsonc"), unknown)
                 .unwrap_err()
                 .iter()
                 .any(|diagnostic| diagnostic.code == "UIKO1007")
@@ -428,7 +442,7 @@ mod tests {
 
         let duplicate = r#"{ "name": "x", "name": "y", "specVersion": 1, "modules": [] }"#;
         assert!(
-            parse_app_config(SourceId::new("uiko.jsonc"), duplicate)
+            parse_app_config(&SourceId::new("uiko.jsonc"), duplicate)
                 .unwrap_err()
                 .iter()
                 .any(|diagnostic| diagnostic.code == "UIKO1006")
@@ -450,9 +464,9 @@ mod tests {
   ]
 }"#;
 
-        let module = parse_module_config(SourceId::new("features/customers/module.jsonc"), module)
+        let module = parse_module_config(&SourceId::new("features/customers/module.jsonc"), module)
             .expect("module should parse");
-        let page = parse_page(SourceId::new("features/customers/detail.jsonc"), page)
+        let page = parse_page(&SourceId::new("features/customers/detail.jsonc"), page)
             .expect("page should parse");
 
         assert_eq!(module.value.id.value, "customers");
@@ -469,7 +483,7 @@ mod tests {
   "components": [{ "type": "Magic" }]
 }"#;
         assert!(
-            parse_page(SourceId::new("broken.jsonc"), page)
+            parse_page(&SourceId::new("broken.jsonc"), page)
                 .unwrap_err()
                 .iter()
                 .any(|diagnostic| diagnostic.code == "UIKO1011")
