@@ -9,7 +9,7 @@ use jsonc_parser::{
     parse_to_ast,
 };
 use uiko_core::{Diagnostic, Located, SourceId, TextSpan};
-use uiko_source::{AppConfigSource, ComponentSource, ModuleConfigSource, PageSource};
+use uiko_source::{AppConfigSource, ComponentKindSource, ComponentSource, ModuleConfigSource, PageSource};
 
 const APP_FIELDS: [&str; 3] = ["name", "specVersion", "modules"];
 const MODULE_FIELDS: [&str; 2] = ["id", "pages"];
@@ -320,27 +320,28 @@ fn parse_component(
         return None;
     };
 
+    let id = parse_required_string(object, "id", source_id, diagnostics)?;
     let kind = parse_required_string(object, "type", source_id, diagnostics)?;
-    let component = match kind.value.as_str() {
+    let component_kind = match kind.value.as_str() {
         "Text" => {
             diagnostics.extend(validate_properties(
                 object,
-                &["type", "value"],
+                &["id", "type", "value"],
                 "Text component",
                 source_id,
             ));
-            ComponentSource::Text {
+            ComponentKindSource::Text {
                 value: parse_required_string(object, "value", source_id, diagnostics)?.value,
             }
         }
         "Field" => {
             diagnostics.extend(validate_properties(
                 object,
-                &["type", "label", "binding"],
+                &["id", "type", "label", "binding"],
                 "Field component",
                 source_id,
             ));
-            ComponentSource::Field {
+            ComponentKindSource::Field {
                 label: parse_required_string(object, "label", source_id, diagnostics)?.value,
                 binding: parse_required_string(object, "binding", source_id, diagnostics)?.value,
             }
@@ -348,11 +349,11 @@ fn parse_component(
         "Table" => {
             diagnostics.extend(validate_properties(
                 object,
-                &["type", "binding"],
+                &["id", "type", "binding"],
                 "Table component",
                 source_id,
             ));
-            ComponentSource::Table {
+            ComponentKindSource::Table {
                 binding: parse_required_string(object, "binding", source_id, diagnostics)?.value,
             }
         }
@@ -366,7 +367,13 @@ fn parse_component(
         }
     };
 
-    Some(Located::new(component, span(source_id, object.range)))
+    Some(Located::new(
+        ComponentSource {
+            id,
+            kind: component_kind,
+        },
+        span(source_id, object.range),
+    ))
 }
 
 fn required_property<'a>(
@@ -461,8 +468,8 @@ mod tests {
   "id": "CustomerDetail",
   "route": "/customers/:customerId",
   "components": [
-    { "type": "Text", "value": "Customer" },
-    { "type": "Field", "label": "Name", "binding": "customer.name" }
+    { "id": "title", "type": "Text", "value": "Customer" },
+    { "id": "name", "type": "Field", "label": "Name", "binding": "customer.name" }
   ]
 }"#;
 
@@ -482,7 +489,7 @@ mod tests {
         let page = r#"{
   "id": "Broken",
   "route": "/broken",
-  "components": [{ "type": "Magic" }]
+  "components": [{ "id": "magic", "type": "Magic" }]
 }"#;
         assert!(
             parse_page(&SourceId::new("broken.jsonc"), page)
