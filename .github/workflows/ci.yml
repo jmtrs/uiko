@@ -245,6 +245,41 @@ jobs:
       - name: Fixture and browser smoke
         run: npm run smoke
 
+  g0-codex-adapter:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.21.0
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Frozen Codex adapter lock is exact
+        run: |
+          jq -e '
+            .schemaVersion == 1
+            and .status == "frozen-g0-v1"
+            and .codexCli.version == "0.155.0"
+            and .execution.jsonLines == true
+            and .execution.ephemeral == true
+            and .execution.ignoreUserConfig == true
+            and .execution.ignoreRules == true
+            and .execution.sandbox == "workspace-write"
+            and .execution.approvalPolicy == "never"
+            and .execution.agentsEnabled == false
+            and .execution.unifiedExec == false
+            and .budget.maxAgentTurns == 4
+            and .budget.maxWallClockMinutes == 30
+          ' experiments/g0/codex/adapter-lock.json > /dev/null
+      - name: Adapter JavaScript syntax
+        run: |
+          for file in experiments/g0/codex/*.mjs; do
+            node --check "$file"
+          done
+      - name: Build real M5 trace runner
+        run: cargo build --quiet -p uiko-g0-runner
+      - name: Codex event-boundary smoke
+        run: node experiments/g0/codex/smoke.mjs --repo .
+
   repository-invariants:
     runs-on: ubuntu-latest
     steps:
@@ -266,6 +301,7 @@ jobs:
             experiments/fixtures/g0-support-api.openapi.json \
             experiments/g0/path-policy.json \
             experiments/g0/prerequisite-bases.json \
+            experiments/g0/codex/adapter-lock.json \
             experiments/g0/harness/package.json \
             experiments/g0/harness/t-authoring-lock.json \
             experiments/g0/run-result.schema.json \
