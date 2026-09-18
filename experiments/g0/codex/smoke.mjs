@@ -5,6 +5,7 @@ import {
   mkdir,
   mkdtemp,
   readFile,
+  realpath,
   rm,
   writeFile,
 } from "node:fs/promises";
@@ -12,6 +13,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 
+import { resolveCodexNativeExecutable } from "./environment.mjs";
 import { validateReview } from "./finalize-run.mjs";
 import {
   buildCodexArgs,
@@ -36,6 +38,42 @@ const results = join(root, "results");
 try {
   await mkdir(worktree, { recursive: true });
   await mkdir(results, { recursive: true });
+
+  const fakePackageRoot = join(root, "fake-codex-package");
+  const fakeLauncher = join(fakePackageRoot, "bin", "codex.js");
+  const fakePlatformPackage = join(
+    fakePackageRoot,
+    "node_modules",
+    "@openai",
+    "codex-linux-x64",
+  );
+  const fakeNative = join(
+    fakePlatformPackage,
+    "vendor",
+    "x86_64-unknown-linux-musl",
+    "bin",
+    "codex",
+  );
+  await mkdir(join(fakePackageRoot, "bin"), { recursive: true });
+  await mkdir(join(fakePlatformPackage, "vendor", "x86_64-unknown-linux-musl", "bin"), {
+    recursive: true,
+  });
+  await writeFile(fakeLauncher, "#!/usr/bin/env node\n", "utf8");
+  await writeFile(
+    join(fakePlatformPackage, "package.json"),
+    '{"name":"@openai/codex-linux-x64","version":"0.155.0"}\n',
+    "utf8",
+  );
+  await writeFile(fakeNative, "native-codex-smoke\n", "utf8");
+
+  assert.equal(
+    await resolveCodexNativeExecutable(fakeLauncher, "linux", "x64"),
+    await realpath(fakeNative),
+  );
+  assert.equal(
+    await resolveCodexNativeExecutable(fakeNative, "linux", "x64"),
+    await realpath(fakeNative),
+  );
 
   runChecked("git", ["init", "--quiet"], worktree);
   runChecked("git", ["config", "user.name", "uiko smoke"], worktree);
