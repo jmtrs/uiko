@@ -1,21 +1,32 @@
 #![forbid(unsafe_code)]
 
 use std::{
+    collections::btree_map::Entry,
     fs,
     path::{Component, Path, PathBuf},
 };
 
+use uiko_capabilities::CapabilityCatalog;
 use uiko_core::{Diagnostic, Located, ModuleId, SourceId, TextSpan};
+use uiko_openapi::{adapter_id, import_openapi_provider};
 use uiko_source::{AppSource, ModuleSource};
-use uiko_source_jsonc::{parse_app_config, parse_module_config, parse_page};
+use uiko_source_jsonc::{
+    parse_app_config, parse_integration_config, parse_module_config, parse_page,
+};
 
-/// Load one filesystem-backed uiko project into authoring-neutral source DTOs.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct LoadedProject {
+    pub source: Located<AppSource>,
+    pub capabilities: CapabilityCatalog,
+}
+
+/// Load one filesystem-backed uiko project plus its normalized capability contracts.
 ///
 /// # Errors
 ///
 /// Returns stable diagnostics for unreadable source, path confinement failures,
-/// and JSONC source errors.
-pub fn load_project(root: &Path) -> Result<Located<AppSource>, Vec<Diagnostic>> {
+/// invalid integration declarations, unsupported contracts and JSONC source errors.
+pub fn load_project(root: &Path) -> Result<LoadedProject, Vec<Diagnostic>> {
     let root = fs::canonicalize(root).map_err(|error| {
         vec![Diagnostic::error(
             "UIKO1200",
@@ -42,19 +53,81 @@ pub fn load_project(root: &Path) -> Result<Located<AppSource>, Vec<Diagnostic>> 
             Err(errors) => diagnostics.extend(errors),
         }
     }
+
+    let mut capabilities = CapabilityCatalog::default();
+    for integration_ref in &app_config.value.integrations {
+        match load_integration(&root, integration_ref) {
+            Ok(provider) => match capabilities.providers.entry(provider.id.clone()) {
+                Entry::Vacant(entry) => {
+                    entry.insert(provider);
+                }
+                Entry::Occupied(_) => diagnostics.push(Diagnostic::error(
+                    "UIKO1203",
+                    format!("duplicate integration id `{}`", provider.id),
+                    integration_ref.span.clone(),
+                )),
+            },
+            Err(errors) => diagnostics.extend(errors),
+        }
+    }
+
     if !diagnostics.is_empty() {
         return Err(diagnostics);
     }
 
     let app_span = app_config.span;
-    Ok(Located::new(
-        AppSource {
-            name: app_config.value.name.value,
-            spec_version: app_config.value.spec_version.value,
-            modules,
-        },
-        app_span,
-    ))
+    Ok(LoadedProject {
+        source: Located::new(
+            AppSource {
+                name: app_config.value.name.value,
+                spec_version: app_config.value.spec_version.value,
+                modules,
+            },
+            app_span,
+        ),
+        capabilities,
+    })
+}
+
+fn load_integration(
+    root: &Path,
+    integration_ref: &Located<String>,
+) -> Result<uiko_capabilities::CapabilityProvider, Vec<Diagnostic>> {
+    let integration_path = resolve_reference(
+        root,
+        root,
+        &integration_ref.value,
+        None,
+        &integration_ref.span,
+    )?;
+    let text = read_referenced_source(root, &integration_path, &integration_ref.span)?;
+    let config = parse_integration_config(&source_id(root, &integration_path), &text)?;
+
+    if config.value.adapter.value != adapter_id() {
+        return Err(vec![Diagnostic::error(
+            "UIKO1204",
+            format!(
+                "unsupported integration adapter `{}`",
+                config.value.adapter.value
+            ),
+            config.value.adapter.span,
+        )]);
+    }
+
+    let integration_dir = integration_path
+        .parent()
+        .expect("resolved integration file always has a parent");
+    let contract_path = resolve_reference(
+        root,
+        integration_dir,
+        &config.value.contract.value,
+        None,
+        &config.value.contract.span,
+    )?;
+    let contract_text = read_referenced_source(root, &contract_path, &config.value.contract.span)?;
+    let contract_source = source_id(root, &contract_path);
+
+    import_openapi_provider(&config.value.id.value, &contract_source, &contract_text)
 }
 
 fn load_module(
@@ -198,12 +271,20 @@ mod tests {
     use super::load_project;
 
     #[test]
-    fn support_console_fixture_loads() {
+    fn support_console_fixture_loads_contract_capabilities() {
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/support-console");
         let project = load_project(&root).expect("fixture should load");
-        assert_eq!(project.value.name, "support-console");
-        assert_eq!(project.value.modules.len(), 1);
-        assert_eq!(project.value.modules[0].value.pages.len(), 2);
+        assert_eq!(project.source.value.name, "support-console");
+        assert_eq!(project.source.value.modules.len(), 1);
+        assert!(
+            project
+                .capabilities
+                .providers
+                .get("crm")
+                .expect("crm provider")
+                .operations
+                .contains_key("getCustomer")
+        );
     }
 
     #[test]
