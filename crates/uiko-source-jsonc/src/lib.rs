@@ -540,10 +540,11 @@ fn parse_optional_string(
     field: &'static str,
     source_id: &SourceId,
     diagnostics: &mut Vec<Diagnostic>,
-) -> Option<Option<String>> {
-    object.get(field).map_or(Some(None), |property| {
-        string_value(property, field, source_id, diagnostics).map(|value| Some(value.value))
-    })
+) -> Option<String> {
+    object
+        .get(field)
+        .and_then(|property| string_value(property, field, source_id, diagnostics))
+        .map(|value| value.value)
 }
 
 fn parse_table_columns(
@@ -698,7 +699,7 @@ fn parse_component(
             ComponentKindSource::Field {
                 label: parse_required_string(object, "label", source_id, diagnostics)?.value,
                 binding: parse_required_string(object, "binding", source_id, diagnostics)?.value,
-                fallback: parse_optional_string(object, "fallback", source_id, diagnostics)?,
+                fallback: parse_optional_string(object, "fallback", source_id, diagnostics),
             }
         }
         "Table" => {
