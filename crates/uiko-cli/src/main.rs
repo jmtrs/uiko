@@ -1,6 +1,11 @@
 #![forbid(unsafe_code)]
 
-use std::{fmt::Write as _, fs, path::{Path, PathBuf}, process::ExitCode};
+use std::{
+    fmt::Write as _,
+    fs,
+    path::{Path, PathBuf},
+    process::ExitCode,
+};
 
 use uiko_compiler::compile;
 use uiko_core::{AppIr, Diagnostic, Severity};
