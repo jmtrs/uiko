@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { existsSync } from "node:fs";
+import { copyFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
 
 export function prepareExecutionBase({
@@ -7,6 +7,7 @@ export function prepareExecutionBase({
   arm,
   taskId,
   prerequisiteManifest,
+  frozenSetupRoot = null,
 }) {
   requireClean(repoRoot);
 
@@ -21,15 +22,15 @@ export function prepareExecutionBase({
     repoRoot,
   ).trim();
 
-  setupHarness(repoRoot);
+  setupHarness(repoRoot, frozenSetupRoot);
 
   switch (arm) {
     case "B_FULL":
-      npmInstall(repoRoot, "baselines/b-full");
+      npmInstall(repoRoot, "baselines/b-full", frozenSetupRoot);
       runChecked("npm", ["run", "generate:api"], resolve(repoRoot, "baselines/b-full"));
       break;
     case "C_UIKO":
-      npmInstall(repoRoot, "hosts/vue");
+      npmInstall(repoRoot, "hosts/vue", frozenSetupRoot);
       runChecked(
         "cargo",
         ["build", "--quiet", "-p", "uiko-cli", "-p", "uiko-g0-gateway"],
@@ -37,7 +38,7 @@ export function prepareExecutionBase({
       );
       break;
     case "R_RENDER_ONLY":
-      npmInstall(repoRoot, "experiments/controls/r-render-only");
+      npmInstall(repoRoot, "experiments/controls/r-render-only", frozenSetupRoot);
       runChecked(
         "npm",
         ["run", "generate:api"],
@@ -45,7 +46,7 @@ export function prepareExecutionBase({
       );
       break;
     case "T_AUTHORING":
-      npmInstall(repoRoot, "hosts/vue");
+      npmInstall(repoRoot, "hosts/vue", frozenSetupRoot);
       runChecked(
         process.execPath,
         ["experiments/g0/harness/prepare-t-authoring.mjs", "--root", repoRoot],
@@ -136,8 +137,8 @@ export function cleanupHarnessArtifacts(repoRoot, arm) {
   }
 }
 
-function setupHarness(repoRoot) {
-  npmInstall(repoRoot, "experiments/g0/harness");
+function setupHarness(repoRoot, frozenSetupRoot) {
+  npmInstall(repoRoot, "experiments/g0/harness", frozenSetupRoot);
   runChecked(
     "npx",
     ["playwright", "install", "chromium"],
@@ -145,11 +146,27 @@ function setupHarness(repoRoot) {
   );
 }
 
-function npmInstall(repoRoot, path) {
+function npmInstall(repoRoot, path, frozenSetupRoot) {
+  const cwd = resolve(repoRoot, path);
+
+  if (frozenSetupRoot !== null) {
+    const frozenLock = resolve(frozenSetupRoot, path, "package-lock.json");
+    if (!existsSync(frozenLock)) {
+      throw new Error(`missing frozen npm lock snapshot: ${frozenLock}`);
+    }
+    copyFileSync(frozenLock, resolve(cwd, "package-lock.json"));
+    runChecked(
+      "npm",
+      ["ci", "--ignore-scripts", "--no-audit", "--no-fund"],
+      cwd,
+    );
+    return;
+  }
+
   runChecked(
     "npm",
     ["install", "--ignore-scripts", "--no-audit", "--no-fund"],
-    resolve(repoRoot, path),
+    cwd,
   );
 }
 
