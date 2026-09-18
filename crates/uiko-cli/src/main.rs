@@ -21,7 +21,7 @@ fn main() -> ExitCode {
         Some("validate") => {
             let validate_args: Vec<_> = args.collect();
             validate(&validate_args)
-        },
+        }
         Some(command) => {
             eprintln!("UIKO0001: unknown command `{command}`");
             ExitCode::from(2)
