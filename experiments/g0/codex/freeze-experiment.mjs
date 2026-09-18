@@ -4,10 +4,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 
-import {
-  assertEnvironmentMatches,
-  inspectEnvironment,
-} from "./environment.mjs";
+import { inspectEnvironment } from "./environment.mjs";
 import { prepareExecutionBase } from "./prepare-base.mjs";
 
 const { values } = parseArgs({
@@ -46,28 +43,13 @@ const taskManifest = await readJson(
 const prerequisiteManifest = await readJson(
   join(sourceRepo, "experiments/g0/prerequisite-bases.json"),
 );
+const harnessPackage = await readJson(
+  join(sourceRepo, "experiments/g0/harness/package.json"),
+);
 
 runPrerequisitePreflight(sourceRepo);
 
-const environment = await inspectEnvironment(sourceRepo, values.codex);
-assertEnvironmentMatches(
-  environment,
-  {
-    environment: {
-      os: environment.os,
-      arch: environment.arch,
-      node: environment.node,
-      npm: environment.npm,
-      rustc: environment.rustc,
-      browser: environment.browser,
-    },
-    agent: {
-      codexExecutableSha256: environment.codex.sha256,
-    },
-  },
-  adapterLock,
-);
-
+let environment = null;
 const taskBases = {};
 const baseInputs = {};
 const root = await mkdtemp(join(tmpdir(), "uiko-g0-lock-"));
@@ -88,6 +70,11 @@ try {
           taskId: task.id,
           prerequisiteManifest,
         });
+        if (environment === null) {
+          environment = await inspectEnvironment(worktree, values.codex);
+          assertFrozenEnvironment(environment, adapterLock, harnessPackage);
+        }
+
         taskBases[arm][task.id] = prepared.baseRevision;
         baseInputs[arm][task.id] = {
           prerequisiteRevision: prepared.prerequisiteRevision,
@@ -100,6 +87,10 @@ try {
   }
 } finally {
   await rm(root, { recursive: true, force: true });
+}
+
+if (environment === null) {
+  throw new Error("no applicable G0 task bases were produced");
 }
 
 const lock = {
@@ -135,6 +126,27 @@ const lock = {
 await mkdir(dirname(output), { recursive: true });
 await writeFile(output, `${JSON.stringify(lock, null, 2)}\n`, "utf8");
 process.stdout.write(`${output}\n`);
+
+function assertFrozenEnvironment(actual, adapterLock, harnessPackage) {
+  const expectedNode = `v${harnessPackage.engines.node}`;
+  const expectedNpm = harnessPackage.packageManager.split("@").at(-1);
+
+  if (actual.node !== expectedNode) {
+    throw new Error(
+      `Node mismatch: expected ${expectedNode}, got ${actual.node}`,
+    );
+  }
+  if (actual.npm !== expectedNpm) {
+    throw new Error(
+      `npm mismatch: expected ${expectedNpm}, got ${actual.npm}`,
+    );
+  }
+  if (!actual.codex.versionOutput.includes(adapterLock.codexCli.version)) {
+    throw new Error(
+      `Codex version mismatch: expected ${adapterLock.codexCli.version}, got ${actual.codex.versionOutput}`,
+    );
+  }
+}
 
 function runPrerequisitePreflight(repo) {
   const result = spawnSync(
