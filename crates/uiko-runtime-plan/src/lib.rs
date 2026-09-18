@@ -97,6 +97,7 @@ mod tests {
                 pages: vec![PageIr {
                     id: "Detail".into(),
                     route: "/customers/:customerId".into(),
+                    state: vec![],
                     queries: vec![QueryIr {
                         id: "customers.Detail.query.customer".into(),
                         alias: "customer".into(),
