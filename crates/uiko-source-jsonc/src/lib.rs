@@ -409,9 +409,10 @@ fn parse_state_value(
 ) -> Option<StateValueSource> {
     match value {
         Value::StringLit(value) => Some(StateValueSource::String(value.value.to_string())),
-        Value::NumberLit(value) => match value.value.parse::<i64>() {
-            Ok(value) => Some(StateValueSource::Integer(value)),
-            Err(_) => {
+        Value::NumberLit(value) => {
+            if let Ok(parsed) = value.value.parse::<i64>() {
+                Some(StateValueSource::Integer(parsed))
+            } else {
                 diagnostics.push(Diagnostic::error(
                     "UIKO1015",
                     format!("state value `{field}` must be an integer"),
@@ -419,7 +420,7 @@ fn parse_state_value(
                 ));
                 None
             }
-        },
+        }
         Value::NullKeyword(_) => Some(StateValueSource::Null),
         other => {
             diagnostics.push(Diagnostic::error(
