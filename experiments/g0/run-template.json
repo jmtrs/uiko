@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "protocol": "g0-v1",
+  "runId": "G0-D01-B_FULL-r1",
+  "taskId": "G0-D01",
+  "arm": "B_FULL",
+  "baseRevision": "REPLACE_WITH_FROZEN_BASE_SHA",
+  "finalRevision": null,
+  "startedAt": "2026-09-18T00:00:00Z",
+  "endedAt": "2026-09-18T00:00:00Z",
+  "model": {
+    "provider": "RECORD_PROVIDER",
+    "model": "RECORD_MODEL",
+    "modelVersion": "RECORD_PROVIDER_VERSION_OR_SNAPSHOT",
+    "agentHarness": "RECORD_AGENT_HARNESS_AND_VERSION",
+    "parameters": {},
+    "seed": null
+  },
+  "environment": {
+    "os": "RECORD_OS",
+    "arch": "RECORD_ARCH",
+    "node": null,
+    "rustc": null,
+    "browser": null
+  },
+  "outcome": "incomplete",
+  "metrics": {
+    "acceptedChangeTokens": 0,
+    "cumulativeAuthoredEditTokens": 0,
+    "nonApplicationEditTokens": 0,
+    "filesTouched": [],
+    "changedBytes": 0,
+    "changedLines": 0,
+    "repositoryReadOperations": 0,
+    "repositorySearchOperations": 0,
+    "editOperations": 0,
+    "validationInvocations": 0,
+    "browserInvocations": 0,
+    "acceptanceLoopActions": 0,
+    "providerInputTokens": null,
+    "providerOutputTokens": null,
+    "wallClockMs": 0,
+    "coreModification": false,
+    "generatedGlueTouched": false
+  },
+  "repairs": [],
+  "acceptance": [],
+  "editTrace": [],
+  "protocolDeviations": []
+}
