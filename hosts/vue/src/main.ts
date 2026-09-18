@@ -1,4 +1,4 @@
-import { Renderer } from "@json-render/vue";
+import { Renderer, StateProvider } from "@json-render/vue";
 import { createApp, defineComponent, h, ref } from "vue";
 
 import { registry } from "./catalog";
@@ -32,20 +32,34 @@ async function loadManifest(): Promise<UiManifest> {
 async function invokeQuery(
   query: UiQuery,
   params: Readonly<Record<string, string>>,
+  state: Readonly<Record<string, unknown>>,
 ): Promise<unknown> {
-  const input: Record<string, string> = {};
+  const input: Record<string, unknown> = {};
 
   for (const binding of query.input) {
-    const routeParam = binding.expression.replace(/^route\./, "");
-    if (routeParam === binding.expression || !(routeParam in params)) {
+    let value: unknown;
+    const routeParam = binding.expression.match(/^route\.(.+)$/)?.[1];
+    const stateKey = binding.expression.match(/^state\.(.+)$/)?.[1];
+
+    if (routeParam !== undefined) {
+      value = params[routeParam];
+    } else if (stateKey !== undefined) {
+      value = state[stateKey];
+    } else {
       throw new Error(
-        `Unsupported or unresolved compiled input ${binding.expression}`,
+        `Unsupported compiled input ${binding.expression}`,
       );
     }
-    const value = params[routeParam];
-    if (value === undefined) {
-      throw new Error(`Missing route parameter ${routeParam}`);
+
+    if (value === null || value === undefined) {
+      if (binding.required) {
+        throw new Error(
+          `Missing required compiled input ${binding.expression}`,
+        );
+      }
+      continue;
     }
+
     input[binding.name] = value;
   }
 
@@ -75,6 +89,9 @@ async function bootstrap(): Promise<void> {
   const current = ref<RouteMatch | null>(
     matchRoute(manifest.routes, window.location.pathname),
   );
+  const localState = ref<Record<string, unknown>>(
+    current.value === null ? {} : { ...current.value.route.state },
+  );
   const queryData = ref<Record<string, unknown>>({});
   const loading = ref(current.value !== null);
   const queryError = ref<string | null>(null);
@@ -82,10 +99,10 @@ async function bootstrap(): Promise<void> {
 
   async function refresh(match: RouteMatch | null): Promise<void> {
     const requestGeneration = ++generation;
-    queryData.value = {};
     queryError.value = null;
 
     if (match === null) {
+      queryData.value = {};
       loading.value = false;
       return;
     }
@@ -95,7 +112,7 @@ async function bootstrap(): Promise<void> {
       const entries = await Promise.all(
         match.route.queries.map(async (query) => [
           query.alias,
-          await invokeQuery(query, match.params),
+          await invokeQuery(query, match.params, localState.value),
         ] as const),
       );
       if (requestGeneration === generation) {
@@ -112,9 +129,14 @@ async function bootstrap(): Promise<void> {
     }
   }
 
+  function resetRoute(match: RouteMatch | null): void {
+    current.value = match;
+    localState.value = match === null ? {} : { ...match.route.state };
+    void refresh(match);
+  }
+
   window.addEventListener("popstate", () => {
-    current.value = matchRoute(manifest.routes, window.location.pathname);
-    void refresh(current.value);
+    resetRoute(matchRoute(manifest.routes, window.location.pathname));
   });
 
   const App = defineComponent({
@@ -151,10 +173,37 @@ async function bootstrap(): Promise<void> {
           },
           [
             status,
-            h(Renderer, {
-              spec: toJsonRenderSpec(match.route, queryData.value),
-              registry,
-            }),
+            h(
+              StateProvider,
+              {
+                key: `${match.route.id}:${window.location.pathname}`,
+                initialState: match.route.state,
+                onStateChange: (
+                  changes: Array<{ path: string; value: unknown }>,
+                ) => {
+                  let changed = false;
+                  const next = { ...localState.value };
+                  for (const change of changes) {
+                    const key = change.path.replace(/^\//, "");
+                    if (key.length > 0) {
+                      next[key] = change.value;
+                      changed = true;
+                    }
+                  }
+                  if (changed) {
+                    localState.value = next;
+                    void refresh(match);
+                  }
+                },
+              },
+              {
+                default: () =>
+                  h(Renderer, {
+                    spec: toJsonRenderSpec(match.route, queryData.value),
+                    registry,
+                  }),
+              },
+            ),
           ],
         );
       };
