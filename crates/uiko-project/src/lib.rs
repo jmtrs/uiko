@@ -32,7 +32,7 @@ pub fn load_project(root: &Path) -> Result<Located<AppSource>, Vec<Diagnostic>> 
             empty_span("uiko.jsonc"),
         )]
     })?;
-    let app_config = parse_app_config(source_id(&root, &app_path), &app_text)?;
+    let app_config = parse_app_config(&source_id(&root, &app_path), &app_text)?;
 
     let mut modules = Vec::with_capacity(app_config.value.modules.len());
     let mut diagnostics = Vec::new();
@@ -69,7 +69,7 @@ fn load_module(
         &module_ref.span,
     )?;
     let text = read_referenced_source(root, &module_path, &module_ref.span)?;
-    let module_config = parse_module_config(source_id(root, &module_path), &text)?;
+    let module_config = parse_module_config(&source_id(root, &module_path), &text)?;
     let module_dir = module_path
         .parent()
         .expect("resolved module file always has a parent");
@@ -92,7 +92,7 @@ fn load_module(
                 continue;
             }
         };
-        match parse_page(source_id(root, &page_path), &page_text) {
+        match parse_page(&source_id(root, &page_path), &page_text) {
             Ok(page) => pages.push(page),
             Err(errors) => diagnostics.extend(errors),
         }
