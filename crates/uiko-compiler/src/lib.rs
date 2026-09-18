@@ -171,6 +171,8 @@ fn lower_page(
         queries.push(QueryIr {
             id: logical_id,
             alias: query.value.id.value.clone(),
+            provider_id: provider_id.to_string(),
+            external_operation_id: operation_id.to_string(),
             input: query
                 .value
                 .input
@@ -474,6 +476,8 @@ mod tests {
         let ir = compile(&app(), &catalog()).expect("valid source");
         let query = &ir.modules[0].pages[0].queries[0];
         assert_eq!(query.id, "customers.CustomerDetail.query.customer");
+        assert_eq!(query.provider_id, "crm");
+        assert_eq!(query.external_operation_id, "getCustomer");
         assert_eq!(query.input[0].expression, "route.customerId");
     }
 
