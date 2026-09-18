@@ -17,7 +17,21 @@ pub struct UiManifest {
 pub struct UiRouteManifest {
     pub id: String,
     pub path: String,
+    pub queries: Vec<UiQueryManifest>,
     pub components: Vec<UiComponentManifest>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct UiQueryManifest {
+    pub id: String,
+    pub alias: String,
+    pub input: Vec<UiQueryInputManifest>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct UiQueryInputManifest {
+    pub name: String,
+    pub expression: String,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -47,6 +61,22 @@ pub fn derive_ui_manifest(ir: &AppIr) -> UiManifest {
                     UiRouteManifest {
                         id: route_id.clone(),
                         path: page.route.clone(),
+                        queries: page
+                            .queries
+                            .iter()
+                            .map(|query| UiQueryManifest {
+                                id: query.id.clone(),
+                                alias: query.alias.clone(),
+                                input: query
+                                    .input
+                                    .iter()
+                                    .map(|binding| UiQueryInputManifest {
+                                        name: binding.name.clone(),
+                                        expression: binding.expression.clone(),
+                                    })
+                                    .collect(),
+                            })
+                            .collect(),
                         components: page
                             .components
                             .iter()
@@ -92,6 +122,15 @@ impl UiManifest {
                 .expect("writing to String cannot fail");
             writeln!(output, "      \"path\": \"{}\",", json_escape(&route.path))
                 .expect("writing to String cannot fail");
+            writeln!(output, "      \"queries\": [").expect("writing to String cannot fail");
+            for (query_index, query) in route.queries.iter().enumerate() {
+                write_query(&mut output, query, 8);
+                if query_index + 1 < route.queries.len() {
+                    output.push(',');
+                }
+                output.push('\n');
+            }
+            writeln!(output, "      ],").expect("writing to String cannot fail");
             writeln!(output, "      \"components\": [").expect("writing to String cannot fail");
 
             for (component_index, component) in route.components.iter().enumerate() {
@@ -114,6 +153,31 @@ impl UiManifest {
         output.push('}');
         output
     }
+}
+
+fn write_query(output: &mut String, query: &UiQueryManifest, indent: usize) {
+    let pad = " ".repeat(indent);
+    write!(
+        output,
+        "{pad}{{\"id\":\"{}\",\"alias\":\"{}\",\"input\":[",
+        json_escape(&query.id),
+        json_escape(&query.alias)
+    )
+    .expect("writing to String cannot fail");
+
+    for (index, binding) in query.input.iter().enumerate() {
+        write!(
+            output,
+            "{{\"name\":\"{}\",\"expression\":\"{}\"}}",
+            json_escape(&binding.name),
+            json_escape(&binding.expression)
+        )
+        .expect("writing to String cannot fail");
+        if index + 1 < query.input.len() {
+            output.push(',');
+        }
+    }
+    output.push_str("]}");
 }
 
 fn write_component(output: &mut String, component: &UiComponentManifest, indent: usize) {
@@ -186,6 +250,20 @@ mod tests {
                 pages: vec![PageIr {
                     id: "CustomerDetail".into(),
                     route: "/customers/:customerId".into(),
+                    queries: vec![uiko_core::QueryIr {
+                        id: "customers.CustomerDetail.query.customer".into(),
+                        alias: "customer".into(),
+                        input: vec![uiko_core::QueryInputIr {
+                            name: "customerId".into(),
+                            expression: "route.customerId".into(),
+                        }],
+                        output: uiko_capabilities::ValueShape {
+                            nullable: false,
+                            kind: uiko_capabilities::ValueKind::Object(
+                                std::collections::BTreeMap::new(),
+                            ),
+                        },
+                    }],
                     components: vec![
                         ComponentIr {
                             id: "title".into(),
@@ -212,6 +290,10 @@ mod tests {
 
         assert_eq!(manifest.spec_version, UI_MANIFEST_SPEC_VERSION);
         assert_eq!(manifest.routes[0].id, "customers.CustomerDetail");
+        assert_eq!(
+            manifest.routes[0].queries[0].id,
+            "customers.CustomerDetail.query.customer"
+        );
         assert_eq!(
             manifest.routes[0].components[0].id,
             "customers.CustomerDetail.title"

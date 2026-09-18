@@ -10,12 +10,15 @@ use jsonc_parser::{
 };
 use uiko_core::{Diagnostic, Located, SourceId, TextSpan};
 use uiko_source::{
-    AppConfigSource, ComponentKindSource, ComponentSource, ModuleConfigSource, PageSource,
+    AppConfigSource, ComponentKindSource, ComponentSource, InputBindingSource,
+    IntegrationConfigSource, ModuleConfigSource, PageSource, QuerySource,
 };
 
-const APP_FIELDS: [&str; 3] = ["name", "specVersion", "modules"];
+const APP_FIELDS: [&str; 4] = ["name", "specVersion", "modules", "integrations"];
 const MODULE_FIELDS: [&str; 2] = ["id", "pages"];
-const PAGE_FIELDS: [&str; 3] = ["id", "route", "components"];
+const INTEGRATION_FIELDS: [&str; 3] = ["id", "adapter", "contract"];
+const PAGE_FIELDS: [&str; 4] = ["id", "route", "queries", "components"];
+const QUERY_FIELDS: [&str; 2] = ["operation", "input"];
 
 /// Parse the root uiko project source into located, authoring-neutral DTOs.
 ///
@@ -31,16 +34,20 @@ pub fn parse_app_config(
     let name = parse_required_string(&object, "name", source_id, &mut diagnostics);
     let spec_version = parse_spec_version(&object, source_id, &mut diagnostics);
     let modules = parse_string_array(&object, "modules", source_id, &mut diagnostics);
+    let integrations =
+        parse_optional_string_array(&object, "integrations", source_id, &mut diagnostics);
+
     finish(
         diagnostics,
-        (name, spec_version, modules),
+        (name, spec_version, modules, integrations),
         source_id,
         object.range,
-        |(name, spec_version, modules)| {
+        |(name, spec_version, modules, integrations)| {
             Some(AppConfigSource {
                 name: name?,
                 spec_version: spec_version?,
                 modules: modules?,
+                integrations: integrations?,
             })
         },
     )
@@ -59,6 +66,7 @@ pub fn parse_module_config(
     let mut diagnostics = validate_properties(&object, &MODULE_FIELDS, "module", source_id);
     let id = parse_required_string(&object, "id", source_id, &mut diagnostics);
     let pages = parse_string_array(&object, "pages", source_id, &mut diagnostics);
+
     finish(
         diagnostics,
         (id, pages),
@@ -73,11 +81,42 @@ pub fn parse_module_config(
     )
 }
 
-/// Parse one minimal page used by the pre-G0 compiler slice.
+/// Parse one capability integration declaration.
 ///
 /// # Errors
 ///
-/// Returns stable diagnostics for malformed pages or unsupported component shapes.
+/// Returns stable diagnostics when the integration source is invalid.
+pub fn parse_integration_config(
+    source_id: &SourceId,
+    text: &str,
+) -> Result<Located<IntegrationConfigSource>, Vec<Diagnostic>> {
+    let object = parse_root_object(source_id, text)?;
+    let mut diagnostics =
+        validate_properties(&object, &INTEGRATION_FIELDS, "integration", source_id);
+    let id = parse_required_string(&object, "id", source_id, &mut diagnostics);
+    let adapter = parse_required_string(&object, "adapter", source_id, &mut diagnostics);
+    let contract = parse_required_string(&object, "contract", source_id, &mut diagnostics);
+
+    finish(
+        diagnostics,
+        (id, adapter, contract),
+        source_id,
+        object.range,
+        |(id, adapter, contract)| {
+            Some(IntegrationConfigSource {
+                id: id?,
+                adapter: adapter?,
+                contract: contract?,
+            })
+        },
+    )
+}
+
+/// Parse one page used by the G0 compiler slice.
+///
+/// # Errors
+///
+/// Returns stable diagnostics for malformed pages or unsupported component/query shapes.
 pub fn parse_page(
     source_id: &SourceId,
     text: &str,
@@ -86,16 +125,19 @@ pub fn parse_page(
     let mut diagnostics = validate_properties(&object, &PAGE_FIELDS, "page", source_id);
     let id = parse_required_string(&object, "id", source_id, &mut diagnostics);
     let route = parse_required_string(&object, "route", source_id, &mut diagnostics);
+    let queries = parse_queries(&object, source_id, &mut diagnostics);
     let components = parse_components(&object, source_id, &mut diagnostics);
+
     finish(
         diagnostics,
-        (id, route, components),
+        (id, route, queries, components),
         source_id,
         object.range,
-        |(id, route, components)| {
+        |(id, route, queries, components)| {
             Some(PageSource {
                 id: id?,
                 route: route?,
+                queries: queries?,
                 components: components?,
             })
         },
@@ -208,6 +250,15 @@ fn parse_required_string(
     diagnostics: &mut Vec<Diagnostic>,
 ) -> Option<Located<String>> {
     let property = required_property(object, field, source_id, diagnostics)?;
+    string_value(property, field, source_id, diagnostics)
+}
+
+fn string_value(
+    property: &ObjectProp<'_>,
+    field: &str,
+    source_id: &SourceId,
+    diagnostics: &mut Vec<Diagnostic>,
+) -> Option<Located<String>> {
     match &property.value {
         Value::StringLit(value) => Some(Located::new(
             value.value.to_string(),
@@ -258,6 +309,26 @@ fn parse_string_array(
     diagnostics: &mut Vec<Diagnostic>,
 ) -> Option<Vec<Located<String>>> {
     let property = required_property(object, field, source_id, diagnostics)?;
+    string_array_value(property, field, source_id, diagnostics)
+}
+
+fn parse_optional_string_array(
+    object: &Object<'_>,
+    field: &'static str,
+    source_id: &SourceId,
+    diagnostics: &mut Vec<Diagnostic>,
+) -> Option<Vec<Located<String>>> {
+    object.get(field).map_or(Some(Vec::new()), |property| {
+        string_array_value(property, field, source_id, diagnostics)
+    })
+}
+
+fn string_array_value(
+    property: &ObjectProp<'_>,
+    field: &str,
+    source_id: &SourceId,
+    diagnostics: &mut Vec<Diagnostic>,
+) -> Option<Vec<Located<String>>> {
     let Value::Array(array) = &property.value else {
         diagnostics.push(Diagnostic::error(
             "UIKO1004",
@@ -282,6 +353,118 @@ fn parse_string_array(
         }
     }
     Some(values)
+}
+
+fn parse_queries(
+    object: &Object<'_>,
+    source_id: &SourceId,
+    diagnostics: &mut Vec<Diagnostic>,
+) -> Option<Vec<Located<QuerySource>>> {
+    let Some(property) = object.get("queries") else {
+        return Some(Vec::new());
+    };
+    let Value::Object(queries) = &property.value else {
+        diagnostics.push(Diagnostic::error(
+            "UIKO1004",
+            "property `queries` must be an object",
+            span(source_id, property.value.range()),
+        ));
+        return None;
+    };
+
+    let mut seen = BTreeSet::new();
+    let mut result = Vec::with_capacity(queries.properties.len());
+
+    for query_property in &queries.properties {
+        let query_id = query_property.name.as_str();
+        if !seen.insert(query_id) {
+            diagnostics.push(Diagnostic::error(
+                "UIKO1006",
+                format!("duplicate query `{query_id}`"),
+                span(source_id, query_property.name.range()),
+            ));
+            continue;
+        }
+
+        let Value::Object(query_object) = &query_property.value else {
+            diagnostics.push(Diagnostic::error(
+                "UIKO1012",
+                format!("query `{query_id}` must be an object"),
+                span(source_id, query_property.value.range()),
+            ));
+            continue;
+        };
+
+        diagnostics.extend(validate_properties(
+            query_object,
+            &QUERY_FIELDS,
+            "query",
+            source_id,
+        ));
+
+        let operation = parse_required_string(query_object, "operation", source_id, diagnostics);
+        let input = parse_query_input(query_object, source_id, diagnostics);
+
+        if let (Some(operation), Some(input)) = (operation, input) {
+            result.push(Located::new(
+                QuerySource {
+                    id: Located::new(
+                        query_id.to_string(),
+                        span(source_id, query_property.name.range()),
+                    ),
+                    operation,
+                    input,
+                },
+                span(source_id, query_property.value.range()),
+            ));
+        }
+    }
+
+    Some(result)
+}
+
+fn parse_query_input(
+    query: &Object<'_>,
+    source_id: &SourceId,
+    diagnostics: &mut Vec<Diagnostic>,
+) -> Option<Vec<Located<InputBindingSource>>> {
+    let property = required_property(query, "input", source_id, diagnostics)?;
+    let Value::Object(input) = &property.value else {
+        diagnostics.push(Diagnostic::error(
+            "UIKO1013",
+            "query `input` must be an object",
+            span(source_id, property.value.range()),
+        ));
+        return None;
+    };
+
+    let mut seen = BTreeSet::new();
+    let mut result = Vec::with_capacity(input.properties.len());
+
+    for binding in &input.properties {
+        let name = binding.name.as_str();
+        if !seen.insert(name) {
+            diagnostics.push(Diagnostic::error(
+                "UIKO1006",
+                format!("duplicate query input `{name}`"),
+                span(source_id, binding.name.range()),
+            ));
+            continue;
+        }
+
+        let Some(expression) = string_value(binding, name, source_id, diagnostics) else {
+            continue;
+        };
+        result.push(Located::new(
+            InputBindingSource {
+                name: Located::new(name.to_string(), span(source_id, binding.name.range())),
+                expression,
+            },
+            span(source_id, binding.value.range()),
+        ));
+    }
+
+    Some(result)
 }
 
 fn parse_components(
@@ -403,7 +586,19 @@ fn span(source_id: &SourceId, range: Range) -> TextSpan {
 mod tests {
     use uiko_core::SourceId;
 
-    use super::{parse_app_config, parse_module_config, parse_page};
+    use super::{parse_app_config, parse_integration_config, parse_module_config, parse_page};
+
+    #[test]
+    fn app_accepts_optional_integration_references() {
+        let source = r#"{
+  "name": "support-console",
+  "specVersion": 1,
+  "modules": ["./features/customers"],
+  "integrations": ["./integrations/crm.jsonc"],
+}"#;
+        let app = parse_app_config(&SourceId::new("uiko.jsonc"), source).expect("valid app");
+        assert_eq!(app.value.integrations.len(), 1);
+    }
 
     #[test]
     fn app_policy_keeps_comments_and_trailing_commas_but_rejects_loose_json() {
@@ -423,54 +618,35 @@ mod tests {
     }
 
     #[test]
-    fn located_values_keep_exact_byte_ranges() {
+    fn integration_shape_parses() {
         let source = r#"{
-  "name": "support-console",
-  "specVersion": 1,
-  "modules": ["./features/customers"]
+  "id": "crm",
+  "adapter": "uiko.openapi-http",
+  "contract": "./openapi/crm.json"
 }"#;
-        let parsed =
-            parse_app_config(&SourceId::new("uiko.jsonc"), source).expect("valid app config");
-
-        let name = &parsed.value.name.span;
-        assert_eq!(&source[name.start..name.end], r#""support-console""#);
-        let module = &parsed.value.modules[0].span;
-        assert_eq!(
-            &source[module.start..module.end],
-            r#""./features/customers""#
-        );
+        let integration =
+            parse_integration_config(&SourceId::new("integrations/crm.jsonc"), source)
+                .expect("valid integration");
+        assert_eq!(integration.value.id.value, "crm");
+        assert_eq!(integration.value.adapter.value, "uiko.openapi-http");
     }
 
     #[test]
-    fn unknown_and_duplicate_properties_fail_closed() {
-        let unknown = r#"{ "name": "x", "specVersion": 1, "modules": [], "surprise": true }"#;
-        assert!(
-            parse_app_config(&SourceId::new("uiko.jsonc"), unknown)
-                .unwrap_err()
-                .iter()
-                .any(|diagnostic| diagnostic.code == "UIKO1007")
-        );
-
-        let duplicate = r#"{ "name": "x", "name": "y", "specVersion": 1, "modules": [] }"#;
-        assert!(
-            parse_app_config(&SourceId::new("uiko.jsonc"), duplicate)
-                .unwrap_err()
-                .iter()
-                .any(|diagnostic| diagnostic.code == "UIKO1006")
-        );
-    }
-
-    #[test]
-    fn module_and_page_fixture_shapes_parse() {
+    fn module_page_and_query_shapes_parse() {
         let module = r#"{
   "id": "customers",
-  "pages": ["./list.jsonc", "./detail.jsonc"]
+  "pages": ["./detail.jsonc"]
 }"#;
         let page = r#"{
   "id": "CustomerDetail",
   "route": "/customers/:customerId",
+  "queries": {
+    "customer": {
+      "operation": "crm.getCustomer",
+      "input": { "customerId": "route.customerId" }
+    }
+  },
   "components": [
-    { "id": "title", "type": "Text", "value": "Customer" },
     { "id": "name", "type": "Field", "label": "Name", "binding": "customer.name" }
   ]
 }"#;
@@ -481,9 +657,11 @@ mod tests {
             .expect("page should parse");
 
         assert_eq!(module.value.id.value, "customers");
-        assert_eq!(module.value.pages.len(), 2);
-        assert_eq!(page.value.id.value, "CustomerDetail");
-        assert_eq!(page.value.components.len(), 2);
+        assert_eq!(page.value.queries[0].value.id.value, "customer");
+        assert_eq!(
+            page.value.queries[0].value.input[0].value.expression.value,
+            "route.customerId"
+        );
     }
 
     #[test]

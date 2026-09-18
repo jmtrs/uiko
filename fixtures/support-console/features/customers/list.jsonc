@@ -1,8 +1,14 @@
 {
   "id": "CustomerList",
   "route": "/customers",
+  "queries": {
+    "customers": {
+      "operation": "crm.listCustomers",
+      "input": {}
+    }
+  },
   "components": [
     { "id": "title", "type": "Text", "value": "Customers" },
-    { "id": "table", "type": "Table", "binding": "customers" }
+    { "id": "table", "type": "Table", "binding": "customers.items" }
   ]
 }

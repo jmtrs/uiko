@@ -1,9 +1,11 @@
 [workspace]
 resolver = "2"
 members = [
+  "crates/uiko-capabilities",
   "crates/uiko-core",
   "crates/uiko-source",
   "crates/uiko-source-jsonc",
+  "crates/uiko-openapi",
   "crates/uiko-project",
   "crates/uiko-compiler",
   "crates/uiko-manifest",

@@ -2,6 +2,8 @@
 
 use std::fmt;
 
+use uiko_capabilities::ValueShape;
+
 /// Stable identifier for a source file known to the compiler.
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct SourceId(String);
@@ -118,7 +120,22 @@ pub struct ModuleIr {
 pub struct PageIr {
     pub id: String,
     pub route: String,
+    pub queries: Vec<QueryIr>,
     pub components: Vec<ComponentIr>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct QueryIr {
+    pub id: String,
+    pub alias: String,
+    pub input: Vec<QueryInputIr>,
+    pub output: ValueShape,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct QueryInputIr {
+    pub name: String,
+    pub expression: String,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

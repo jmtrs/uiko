@@ -19,6 +19,17 @@ const tableComponentSchema = z.object({
   binding: z.string().min(1),
 });
 
+const queryInputSchema = z.object({
+  name: z.string().min(1),
+  expression: z.string().min(1),
+});
+
+const querySchema = z.object({
+  id: z.string().min(1),
+  alias: z.string().min(1),
+  input: z.array(queryInputSchema),
+});
+
 export const uiComponentSchema = z.discriminatedUnion("kind", [
   textComponentSchema,
   fieldComponentSchema,
@@ -28,6 +39,7 @@ export const uiComponentSchema = z.discriminatedUnion("kind", [
 export const uiRouteSchema = z.object({
   id: z.string().min(1),
   path: z.string().startsWith("/"),
+  queries: z.array(querySchema),
   components: z.array(uiComponentSchema),
 });
 
@@ -38,5 +50,6 @@ export const uiManifestSchema = z.object({
 });
 
 export type UiComponent = z.infer<typeof uiComponentSchema>;
+export type UiQuery = z.infer<typeof querySchema>;
 export type UiRoute = z.infer<typeof uiRouteSchema>;
 export type UiManifest = z.infer<typeof uiManifestSchema>;
