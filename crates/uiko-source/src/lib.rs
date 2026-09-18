@@ -42,7 +42,13 @@ pub struct PageSource {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub enum ComponentSource {
+pub struct ComponentSource {
+    pub id: Located<String>,
+    pub kind: ComponentKindSource,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum ComponentKindSource {
     Text { value: String },
     Field { label: String, binding: String },
     Table { binding: String },
