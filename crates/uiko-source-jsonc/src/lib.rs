@@ -237,16 +237,15 @@ fn parse_spec_version(
         return None;
     };
 
-    match value.value.parse::<u32>() {
-        Ok(version) => Some(Located::new(version, span(source_id, value.range))),
-        Err(_) => {
-            diagnostics.push(Diagnostic::error(
-                "UIKO1005",
-                "property `specVersion` must be an unsigned integer",
-                span(source_id, value.range),
-            ));
-            None
-        }
+    if let Ok(version) = value.value.parse::<u32>() {
+        Some(Located::new(version, span(source_id, value.range)))
+    } else {
+        diagnostics.push(Diagnostic::error(
+            "UIKO1005",
+            "property `specVersion` must be an unsigned integer",
+            span(source_id, value.range),
+        ));
+        None
     }
 }
 
