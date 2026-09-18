@@ -1,0 +1,136 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://uiko.dev/schemas/g0-trace-event-v1.json",
+  "title": "uiko G0 trace event",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "sequence", "runId", "taskId", "arm", "kind"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "sequence": { "type": "integer", "minimum": 1 },
+    "runId": { "type": "string", "minLength": 1 },
+    "taskId": { "type": "string", "pattern": "^G0-D0[1-6]$" },
+    "arm": {
+      "enum": ["B_FULL", "C_UIKO", "R_RENDER_ONLY", "T_AUTHORING"]
+    },
+    "kind": {
+      "enum": [
+        "run_start",
+        "repository_read",
+        "repository_search",
+        "edit",
+        "validation",
+        "browser",
+        "repair",
+        "acceptance",
+        "provider_tokens",
+        "protocol_deviation",
+        "run_end"
+      ]
+    },
+    "baseRevision": { "type": "string", "minLength": 7 },
+    "startedAt": { "type": "string", "format": "date-time" },
+    "startedUnixMs": { "type": "integer", "minimum": 0 },
+    "model": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["provider", "model", "modelVersion", "agentHarness", "parameters"],
+      "properties": {
+        "provider": { "type": "string" },
+        "model": { "type": "string" },
+        "modelVersion": { "type": "string" },
+        "agentHarness": { "type": "string" },
+        "parameters": { "type": "object" },
+        "seed": { "type": ["integer", "string", "null"] }
+      }
+    },
+    "environment": {
+      "type": "object",
+      "required": ["os", "arch"],
+      "properties": {
+        "os": { "type": "string" },
+        "arch": { "type": "string" },
+        "node": { "type": ["string", "null"] },
+        "rustc": { "type": ["string", "null"] },
+        "browser": { "type": ["string", "null"] }
+      },
+      "additionalProperties": true
+    },
+    "target": { "type": "string" },
+    "query": { "type": "string" },
+    "path": { "type": "string", "minLength": 1 },
+    "operation": { "enum": ["create", "update", "delete"] },
+    "beforeText": { "type": ["string", "null"] },
+    "afterText": { "type": ["string", "null"] },
+    "command": { "type": "string" },
+    "success": { "type": "boolean" },
+    "evidence": { "type": ["string", "null"] },
+    "action": { "type": "string" },
+    "iteration": { "type": "integer", "minimum": 1 },
+    "category": {
+      "enum": ["LOCAL", "WIRING", "COHERENCE", "VISUAL_FIT", "ENVIRONMENT"]
+    },
+    "reason": { "type": "string" },
+    "sourcePaths": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "criterionIndex": { "type": "integer", "minimum": 0 },
+    "passed": { "type": "boolean" },
+    "inputTokens": { "type": "integer", "minimum": 0 },
+    "outputTokens": { "type": "integer", "minimum": 0 },
+    "code": { "type": "string" },
+    "description": { "type": "string" },
+    "impact": { "enum": ["none", "minor", "material", "invalidating"] },
+    "endedAt": { "type": "string", "format": "date-time" },
+    "endedUnixMs": { "type": "integer", "minimum": 0 },
+    "outcome": { "enum": ["accepted", "incomplete", "invalidated", "aborted"] },
+    "finalRevision": { "type": ["string", "null"] }
+  },
+  "oneOf": [
+    {
+      "properties": { "kind": { "const": "run_start" } },
+      "required": ["baseRevision", "startedAt", "startedUnixMs", "model", "environment"]
+    },
+    {
+      "properties": { "kind": { "const": "repository_read" } },
+      "required": ["target"]
+    },
+    {
+      "properties": { "kind": { "const": "repository_search" } },
+      "required": ["query"]
+    },
+    {
+      "properties": { "kind": { "const": "edit" } },
+      "required": ["path", "operation", "beforeText", "afterText"]
+    },
+    {
+      "properties": { "kind": { "const": "validation" } },
+      "required": ["command", "success"]
+    },
+    {
+      "properties": { "kind": { "const": "browser" } },
+      "required": ["action", "success"]
+    },
+    {
+      "properties": { "kind": { "const": "repair" } },
+      "required": ["iteration", "category", "reason", "evidence", "sourcePaths"]
+    },
+    {
+      "properties": { "kind": { "const": "acceptance" } },
+      "required": ["criterionIndex", "passed", "evidence"]
+    },
+    {
+      "properties": { "kind": { "const": "provider_tokens" } },
+      "required": ["inputTokens", "outputTokens"]
+    },
+    {
+      "properties": { "kind": { "const": "protocol_deviation" } },
+      "required": ["code", "description", "impact"]
+    },
+    {
+      "properties": { "kind": { "const": "run_end" } },
+      "required": ["endedAt", "endedUnixMs", "outcome", "finalRevision"]
+    }
+  ]
+}
