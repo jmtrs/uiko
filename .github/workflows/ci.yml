@@ -201,7 +201,7 @@ jobs:
           cd ../../..
           base="$(git rev-parse HEAD)"
           git reset --hard --quiet "$base"
-          git clean -fd -- experiments/controls/t-authoring/generated experiments/g0/harness/package-lock.json
+          git clean -fd
           first="$(bash experiments/g0/materialize-prerequisite-base.sh T_AUTHORING G0-D05 .)"
           cd experiments/g0/harness
           node prepare-t-authoring.mjs --root ../../..
@@ -215,7 +215,7 @@ jobs:
             and ((.routes[0].components) | any(.kind == "Select" and .state == "status"))
           ' /tmp/t-authoring-d03.uiko-manifest.json > /dev/null
           git reset --hard --quiet "$base"
-          git clean -fd -- experiments/controls/t-authoring/generated experiments/g0/harness/package-lock.json
+          git clean -fd
           second="$(bash experiments/g0/materialize-prerequisite-base.sh T_AUTHORING G0-D05 .)"
           test "$first" = "$second"
 
