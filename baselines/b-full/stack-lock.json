@@ -21,7 +21,7 @@
   "tooling": {
     "vite": "7.3.6",
     "@vitejs/plugin-react": "5.2.0",
-    "typescript": "6.0.3",
+    "typescript": "5.9.3",
     "openapi-typescript": "7.13.0",
     "eslint": "10.10.0",
     "typescript-eslint": "8.70.0",
@@ -33,5 +33,10 @@
     "exactVersionsOnly": true,
     "noAsymmetricUpgrades": true,
     "postFirstRunChangesRequireProtocolDeviation": true
+  },
+  "compatibilityCorrection": {
+    "date": "2026-09-18",
+    "reason": "Pre-measurement correction: openapi-typescript 7.13.0 declares a TypeScript ^5.x peer dependency, so TypeScript 6.0.3 made the frozen conventional stack non-installable.",
+    "firstMeasuredRunStarted": false
   }
 }
