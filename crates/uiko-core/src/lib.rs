@@ -120,8 +120,23 @@ pub struct ModuleIr {
 pub struct PageIr {
     pub id: String,
     pub route: String,
+    pub state: Vec<StateIr>,
     pub queries: Vec<QueryIr>,
     pub components: Vec<ComponentIr>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct StateIr {
+    pub id: String,
+    pub initial: ScalarValue,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum ScalarValue {
+    Null,
+    Boolean(bool),
+    Number(String),
+    String(String),
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -138,6 +153,7 @@ pub struct QueryIr {
 pub struct QueryInputIr {
     pub name: String,
     pub expression: String,
+    pub required: bool,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -148,7 +164,39 @@ pub struct ComponentIr {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ComponentKindIr {
-    Text { value: String },
-    Field { label: String, binding: String },
-    Table { binding: String },
+    Text {
+        value: String,
+    },
+    Field {
+        label: String,
+        binding: String,
+        fallback: Option<String>,
+    },
+    Table {
+        binding: String,
+        columns: Vec<TableColumnIr>,
+    },
+    Select {
+        label: String,
+        state: String,
+        options: Vec<SelectOptionIr>,
+    },
+    Pagination {
+        page_state: String,
+        page_binding: String,
+        page_size_binding: String,
+        total_binding: String,
+    },
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct TableColumnIr {
+    pub label: String,
+    pub binding: String,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SelectOptionIr {
+    pub label: String,
+    pub value: ScalarValue,
 }
