@@ -643,8 +643,15 @@ fn parse_component(
             ComponentKindSource::Pagination {
                 state: parse_required_string(object, "state", source_id, diagnostics)?.value,
                 page_binding: parse_required_string(object, "page", source_id, diagnostics)?.value,
-                page_size_binding: parse_required_string(object, "pageSize", source_id, diagnostics)?.value,
-                total_binding: parse_required_string(object, "total", source_id, diagnostics)?.value,
+                page_size_binding: parse_required_string(
+                    object,
+                    "pageSize",
+                    source_id,
+                    diagnostics,
+                )?
+                .value,
+                total_binding: parse_required_string(object, "total", source_id, diagnostics)?
+                    .value,
             }
         }
         other => {
@@ -711,15 +718,12 @@ fn parse_select_options(
         let Some(label) = parse_required_string(option, "label", source_id, diagnostics) else {
             continue;
         };
-        let Some(value_property) = required_property(option, "value", source_id, diagnostics) else {
+        let Some(value_property) = required_property(option, "value", source_id, diagnostics)
+        else {
             continue;
         };
-        let Some(value) = parse_state_value(
-            &value_property.value,
-            "value",
-            source_id,
-            diagnostics,
-        ) else {
+        let Some(value) = parse_state_value(&value_property.value, "value", source_id, diagnostics)
+        else {
             continue;
         };
         result.push(SelectOptionSource {
