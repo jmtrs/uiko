@@ -43,6 +43,7 @@ async function main() {
   const replicate = positiveInteger(values.replicate, "--replicate");
   const sourceRepo = resolve(values.repo);
   const experimentLock = await readJson(resolve(values.lock));
+  const lockRevision = assertLockCheckout(sourceRepo, experimentLock);
   const adapterLock = await readJson(
     resolve(sourceRepo, "experiments/g0/codex/adapter-lock.json"),
   );
@@ -126,6 +127,7 @@ async function main() {
         browser: environment.browser,
         npm: environment.npm,
         codexExecutableSha256: environment.codex.sha256,
+        experimentLockRevision: lockRevision,
       },
     });
 
@@ -148,6 +150,7 @@ async function main() {
           arm,
           taskId,
           harnessRevision: experimentLock.harnessRevision,
+          experimentLockRevision: lockRevision,
           prerequisiteRevision: prepared.prerequisiteRevision,
           baseRevision: prepared.baseRevision,
           codexVersion: environment.codex.versionOutput,
@@ -293,6 +296,47 @@ async function main() {
   }
 
   process.stdout.write(`${JSON.stringify(pending, null, 2)}\n`);
+}
+
+function assertLockCheckout(sourceRepo, lock) {
+  const status = runCapture(
+    "git",
+    ["status", "--porcelain", "--untracked-files=all"],
+    sourceRepo,
+  );
+  if (status.trim().length > 0) {
+    throw new Error(`measured G0 requires a clean lock checkout:\n${status}`);
+  }
+
+  const head = runCapture("git", ["rev-parse", "HEAD"], sourceRepo).trim();
+  const parent = runCapture("git", ["rev-parse", "HEAD^"], sourceRepo).trim();
+  if (parent !== lock.harnessRevision) {
+    throw new Error(
+      `G0 lock checkout parent mismatch: expected harness ${lock.harnessRevision}, got ${parent}`,
+    );
+  }
+
+  const changed = runCapture(
+    "git",
+    ["diff", "--name-only", `${lock.harnessRevision}..${head}`],
+    sourceRepo,
+  )
+    .split(/\r?\n/)
+    .filter(Boolean);
+  if (!changed.includes("experiments/g0/experiment-lock.json")) {
+    throw new Error("G0 lock commit does not contain experiment-lock.json");
+  }
+  const unexpected = changed.filter(
+    (path) =>
+      path !== "experiments/g0/experiment-lock.json" &&
+      !path.startsWith("experiments/g0/frozen-setup/"),
+  );
+  if (unexpected.length > 0) {
+    throw new Error(
+      `G0 lock commit contains non-lock changes:\n${unexpected.join("\n")}`,
+    );
+  }
+  return head;
 }
 
 function addWorktree(sourceRepo, worktree, revision) {
