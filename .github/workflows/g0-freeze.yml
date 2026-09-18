@@ -65,6 +65,8 @@ jobs:
             and .agent.modelVersion == env.G0_MODEL_VERSION
             and .agent.reasoningEffort == env.G0_REASONING_EFFORT
             and .agent.codexCliVersion == "0.155.0"
+            and (.agent.codexLauncherSha256 | length == 64)
+            and (.agent.codexExecutableSha256 | length == 64)
             and .prerequisitePreflight.status == "passed"
             and (.taskBases.B_FULL | length == 6)
             and (.taskBases.C_UIKO | length == 6)

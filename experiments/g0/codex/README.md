@@ -58,7 +58,7 @@ The freezer:
 
 - requires a clean repository;
 - runs predecessor acceptance preflight for every non-empty prerequisite edge;
-- fingerprints Codex, Node, npm, Rust and Chromium;
+- fingerprints the Codex launcher and the actual native Codex executable, plus Node, npm, Rust and Chromium;
 - reconstructs every applicable task execution base and records its exact SHA;
 - freezes the exact npm lockfiles under `experiments/g0/frozen-setup/`;
 - reconstructs every base a second time with `npm ci` from those snapshots and requires identical SHAs;

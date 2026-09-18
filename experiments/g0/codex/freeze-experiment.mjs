@@ -153,6 +153,8 @@ const lock = {
     modelVersion,
     reasoningEffort,
     codexCliVersion: adapterLock.codexCli.version,
+    codexLauncherExecutable: environment.codex.launcherExecutable,
+    codexLauncherSha256: environment.codex.launcherSha256,
     codexExecutable: environment.codex.executable,
     codexExecutableSha256: environment.codex.sha256,
   },
