@@ -40,3 +40,37 @@ Each run starts with the exact frozen task prompt. After the Codex turn, the sha
 If acceptance fails, the next Codex turn receives only deterministic harness failure evidence. No human implementation hint is injected. The frozen run budget is four Codex turns total.
 
 The trace remains open after the loop. Repair categories are reviewed separately before `run_end` and aggregation.
+
+
+## Freeze the experiment lock
+
+After this adapter is merged and before the first measured run, freeze the exact
+repository revision, task execution bases and machine fingerprint:
+
+```bash
+node experiments/g0/codex/freeze-lock.mjs \
+  --model gpt-6-astra \
+  --reasoning-effort high
+```
+
+The defaults are `gpt-6-astra` with `high` reasoning. Codex CLI 0.155.0
+supports that pair. The stronger quality-first model is used identically across
+paired arms; subagents remain disabled by the adapter lock.
+
+The freezer:
+
+- requires a clean repository and uses its current `HEAD` as
+  `harnessRevision`;
+- materializes every applicable arm/task execution base through the real setup
+  path and records the resulting deterministic commit SHA;
+- records the exact Codex executable SHA-256 plus OS, architecture, Node, npm,
+  Rust and Chromium versions from the machine that will execute G0;
+- writes `experiments/g0/experiment-lock.json`;
+- refuses to overwrite a tracked experiment lock.
+
+If the provider exposes an immutable model snapshot identifier, pass it with
+`--model-version <snapshot>`. Otherwise the lock records
+`modelVersion: "server-managed"` and `modelSnapshotAvailable: false`.
+
+Commit the generated lock before starting the first measured run. After that
+point, do not regenerate it silently.
