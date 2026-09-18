@@ -1,6 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
 
 import { TraceWriter } from "./trace-adapter.mjs";
@@ -97,9 +98,12 @@ async function main() {
   process.stdout.write(`${JSON.stringify(marker, null, 2)}\n`);
 }
 
-function validateReview(pending, review) {
+export function validateReview(pending, review) {
   if (pending.status !== "awaiting-repair-review") {
     throw new Error("pending run is not awaiting repair review");
+  }
+  if (!Number.isInteger(pending.turns) || pending.turns < 1) {
+    throw new Error("pending run must record a positive turn count");
   }
   if (review.schemaVersion !== 1 || review.status !== "reviewed") {
     throw new Error("repair review must be schemaVersion=1 and status=reviewed");
@@ -118,6 +122,11 @@ function validateReview(pending, review) {
   for (const repair of review.repairs) {
     if (!Number.isInteger(repair.iteration) || repair.iteration < 1) {
       throw new Error("repair iteration must be a positive integer");
+    }
+    if (repair.iteration > pending.turns - 1) {
+      throw new Error(
+        `repair iteration ${repair.iteration} exceeds the ${Math.max(0, pending.turns - 1)} possible repair iteration(s)`,
+      );
     }
     if (iterations.has(repair.iteration)) {
       throw new Error(`duplicate repair iteration ${repair.iteration}`);
@@ -153,4 +162,9 @@ function required(value, option) {
   return value;
 }
 
-await main();
+if (
+  process.argv[1] &&
+  import.meta.url === pathToFileURL(resolve(process.argv[1])).href
+) {
+  await main();
+}
