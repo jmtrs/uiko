@@ -14,10 +14,7 @@ const defaultRepoRoot = resolve(here, "../../..");
 const { values } = parseArgs({
   options: {
     repo: { type: "string", default: defaultRepoRoot },
-    output: {
-      type: "string",
-      default: resolve(defaultRepoRoot, "experiments/g0/experiment-lock.json"),
-    },
+    output: { type: "string" },
     codex: { type: "string", default: "codex" },
     model: { type: "string", default: "gpt-6-astra" },
     "model-version": { type: "string" },
@@ -26,7 +23,9 @@ const { values } = parseArgs({
 });
 
 const sourceRepo = resolve(values.repo);
-const outputPath = resolve(values.output);
+const outputPath = resolve(
+  values.output ?? resolve(sourceRepo, "experiments/g0/experiment-lock.json"),
+);
 const codexBin = values.codex;
 const model = nonEmpty(values.model, "--model");
 const reasoningEffort = nonEmpty(
