@@ -6,7 +6,9 @@ rust-version.workspace = true
 license.workspace = true
 
 [dependencies]
+uiko-capabilities = { path = "../uiko-capabilities" }
 uiko-core = { path = "../uiko-core" }
+uiko-openapi = { path = "../uiko-openapi" }
 uiko-source = { path = "../uiko-source" }
 uiko-source-jsonc = { path = "../uiko-source-jsonc" }
 
