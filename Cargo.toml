@@ -12,6 +12,7 @@ members = [
   "crates/uiko-project",
   "crates/uiko-compiler",
   "crates/uiko-manifest",
+  "crates/uiko-diff",
   "crates/uiko-cli",
 ]
 

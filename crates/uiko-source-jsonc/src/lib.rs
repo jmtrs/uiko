@@ -19,7 +19,7 @@ const APP_FIELDS: [&str; 4] = ["name", "specVersion", "modules", "integrations"]
 const MODULE_FIELDS: [&str; 2] = ["id", "pages"];
 const INTEGRATION_FIELDS: [&str; 3] = ["id", "adapter", "contract"];
 const PAGE_FIELDS: [&str; 5] = ["id", "route", "state", "queries", "components"];
-const QUERY_FIELDS: [&str; 2] = ["operation", "input"];
+const QUERY_FIELDS: [&str; 4] = ["operation", "input", "execution", "authorization"];
 
 /// Parse the root uiko project source into located, authoring-neutral DTOs.
 ///
@@ -482,8 +482,12 @@ fn parse_queries(
 
         let operation = parse_required_string(query_object, "operation", source_id, diagnostics);
         let input = parse_query_input(query_object, source_id, diagnostics);
+        let execution = parse_execution(query_object, source_id, diagnostics);
+        let authorization = parse_authorization(query_object, source_id, diagnostics);
 
-        if let (Some(operation), Some(input)) = (operation, input) {
+        if let (Some(operation), Some(input), Some(execution), Some(authorization)) =
+            (operation, input, execution, authorization)
+        {
             result.push(Located::new(
                 QuerySource {
                     id: Located::new(
@@ -492,6 +496,8 @@ fn parse_queries(
                     ),
                     operation,
                     input,
+                    execution,
+                    authorization,
                 },
                 span(source_id, query_property.value.range()),
             ));
@@ -543,6 +549,71 @@ fn parse_query_input(
     }
 
     Some(result)
+}
+
+/// `None` means a shape error was reported; `Some(None)` means the optional
+/// declaration is absent (derived `Managed` downstream).
+#[expect(
+    clippy::option_option,
+    reason = "absent declaration and reported error are distinct outcomes"
+)]
+fn parse_execution(
+    query: &Object<'_>,
+    source_id: &SourceId,
+    diagnostics: &mut Vec<Diagnostic>,
+) -> Option<Option<Located<String>>> {
+    let Some(property) = query.get("execution") else {
+        return Some(None);
+    };
+    match &property.value {
+        Value::StringLit(value) => Some(Some(Located::new(
+            value.value.to_string(),
+            span(source_id, value.range),
+        ))),
+        value => {
+            diagnostics.push(Diagnostic::error(
+                "UIKO1017",
+                "property `execution` must be a string",
+                span(source_id, value.range()),
+            ));
+            None
+        }
+    }
+}
+
+/// Absent declaration lowers to an empty scope list, not an error.
+fn parse_authorization(
+    query: &Object<'_>,
+    source_id: &SourceId,
+    diagnostics: &mut Vec<Diagnostic>,
+) -> Option<Vec<Located<String>>> {
+    let Some(property) = query.get("authorization") else {
+        return Some(Vec::new());
+    };
+    let Value::Array(array) = &property.value else {
+        diagnostics.push(Diagnostic::error(
+            "UIKO1017",
+            "property `authorization` must be an array of non-empty strings",
+            span(source_id, property.value.range()),
+        ));
+        return None;
+    };
+
+    let mut values = Vec::with_capacity(array.elements.len());
+    for element in &array.elements {
+        match element {
+            Value::StringLit(value) if !value.value.is_empty() => values.push(Located::new(
+                value.value.to_string(),
+                span(source_id, value.range),
+            )),
+            value => diagnostics.push(Diagnostic::error(
+                "UIKO1017",
+                "every `authorization` entry must be a non-empty string",
+                span(source_id, value.range()),
+            )),
+        }
+    }
+    Some(values)
 }
 
 fn parse_components(
@@ -899,6 +970,83 @@ mod tests {
                 .unwrap_err()
                 .iter()
                 .any(|diagnostic| diagnostic.code == "UIKO1011")
+        );
+    }
+
+    #[test]
+    fn query_execution_and_authorization_parse() {
+        let page = r#"{
+  "id": "CustomerDetail",
+  "route": "/customers/:customerId",
+  "queries": {
+    "customer": {
+      "operation": "crm.getCustomer",
+      "input": { "customerId": "route.customerId" },
+      "execution": "unmanaged",
+      "authorization": ["crm:read"]
+    }
+  },
+  "components": []
+}"#;
+
+        let page = parse_page(&SourceId::new("detail.jsonc"), page).expect("page should parse");
+        let query = &page.value.queries[0].value;
+
+        assert_eq!(
+            query.execution.as_ref().expect("execution").value,
+            "unmanaged"
+        );
+        assert_eq!(query.authorization[0].value, "crm:read");
+    }
+
+    #[test]
+    fn authorization_must_be_an_array_of_non_empty_strings() {
+        let not_array = r#"{
+  "id": "Broken",
+  "route": "/broken",
+  "queries": {
+    "q": { "operation": "crm.getCustomer", "input": {}, "authorization": "crm:read" }
+  },
+  "components": []
+}"#;
+        assert!(
+            parse_page(&SourceId::new("broken.jsonc"), not_array)
+                .unwrap_err()
+                .iter()
+                .any(|diagnostic| diagnostic.code == "UIKO1017")
+        );
+
+        let empty_entry = r#"{
+  "id": "Broken",
+  "route": "/broken",
+  "queries": {
+    "q": { "operation": "crm.getCustomer", "input": {}, "authorization": [""] }
+  },
+  "components": []
+}"#;
+        assert!(
+            parse_page(&SourceId::new("broken.jsonc"), empty_entry)
+                .unwrap_err()
+                .iter()
+                .any(|diagnostic| diagnostic.code == "UIKO1017")
+        );
+    }
+
+    #[test]
+    fn unknown_query_property_still_fails_closed() {
+        let page = r#"{
+  "id": "Broken",
+  "route": "/broken",
+  "queries": {
+    "q": { "operation": "crm.getCustomer", "input": {}, "retries": 3 }
+  },
+  "components": []
+}"#;
+        assert!(
+            parse_page(&SourceId::new("broken.jsonc"), page)
+                .unwrap_err()
+                .iter()
+                .any(|diagnostic| diagnostic.code == "UIKO1007")
         );
     }
 }

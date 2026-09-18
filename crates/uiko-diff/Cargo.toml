@@ -1,20 +1,19 @@
 [package]
-name = "uiko-cli"
+name = "uiko-diff"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 
-[[bin]]
-name = "uiko"
-path = "src/main.rs"
-
 [dependencies]
-uiko-compiler = { path = "../uiko-compiler" }
+uiko-capabilities = { path = "../uiko-capabilities" }
 uiko-core = { path = "../uiko-core" }
-uiko-diff = { path = "../uiko-diff" }
-uiko-manifest = { path = "../uiko-manifest" }
+
+[dev-dependencies]
+uiko-compiler = { path = "../uiko-compiler" }
 uiko-project = { path = "../uiko-project" }
+uiko-source = { path = "../uiko-source" }
+uiko-source-jsonc = { path = "../uiko-source-jsonc" }
 
 [lints]
 workspace = true

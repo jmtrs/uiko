@@ -45,6 +45,12 @@ jobs:
             and ([.routes[].queries[] | has("method")] | any | not)
             and ([.routes[].queries[] | has("path")] | any | not)
           ' /tmp/compiler-fixture.uiko-manifest.json > /dev/null
+      - name: Plan self-diff is clean and machine-readable
+        run: |
+          set -o pipefail
+          cargo run --quiet -p uiko-cli -- diff experiments/fixtures/compiler-support-console \
+            experiments/fixtures/compiler-support-console --format json \
+            | jq -e '.status == "clean" and (.rows | length) == 0' > /dev/null
       - name: Measured C_UIKO base starts with zero routes
         run: |
           cargo run --quiet -p uiko-cli -- build fixtures/support-console \

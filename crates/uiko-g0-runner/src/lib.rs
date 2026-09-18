@@ -1363,10 +1363,17 @@ mod tests {
     }
 
     fn test_repo(initial: &str) -> (PathBuf, PathBuf, String) {
-        let unique = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .expect("clock after epoch")
-            .as_nanos();
+        // Nanosecond timestamps alone collide between parallel tests woken on
+        // the same tick; the process-local counter guarantees uniqueness.
+        static REPO_SEQUENCE: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        let unique = format!(
+            "{}-{}",
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("clock after epoch")
+                .as_nanos(),
+            REPO_SEQUENCE.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+        );
         let repo = std::env::temp_dir().join(format!("uiko-g0-metrics-{unique}"));
         let trace = std::env::temp_dir().join(format!("uiko-g0-trace-{unique}.ndjson"));
         let app_file = repo.join(APP_PATH);

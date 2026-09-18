@@ -429,6 +429,8 @@ mod tests {
                             name: "customerId".into(),
                             expression: "route.customerId".into(),
                         }],
+                        execution: uiko_core::ExecutionModeIr::Managed,
+                        required_scopes: vec![],
                         output: uiko_capabilities::ValueShape {
                             nullable: false,
                             kind: uiko_capabilities::ValueKind::Object(

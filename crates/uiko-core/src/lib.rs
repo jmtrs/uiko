@@ -138,6 +138,17 @@ pub enum StateValueIr {
     Null,
 }
 
+/// Derived execution-assurance tier for one query execution path.
+///
+/// `Managed` is derived from resolution through a built-in capability path;
+/// `Unmanaged` is only reachable through an explicit source escape declaration.
+/// Review-surface only: runtime enforcement is Bet B.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub enum ExecutionModeIr {
+    Managed,
+    Unmanaged,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct QueryIr {
     pub id: String,
@@ -145,6 +156,8 @@ pub struct QueryIr {
     pub provider_id: String,
     pub external_operation_id: String,
     pub input: Vec<QueryInputIr>,
+    pub execution: ExecutionModeIr,
+    pub required_scopes: Vec<String>,
     pub output: ValueShape,
 }
 

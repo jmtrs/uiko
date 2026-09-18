@@ -104,6 +104,8 @@ mod tests {
                         provider_id: "crm".into(),
                         external_operation_id: "getCustomer".into(),
                         input: vec![],
+                        execution: uiko_core::ExecutionModeIr::Managed,
+                        required_scopes: vec![],
                         output: ValueShape {
                             nullable: false,
                             kind: ValueKind::String,

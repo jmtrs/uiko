@@ -63,6 +63,10 @@ pub struct QuerySource {
     pub id: Located<String>,
     pub operation: Located<String>,
     pub input: Vec<Located<InputBindingSource>>,
+    /// Optional review-surface execution declaration; absent means derived `Managed`.
+    pub execution: Option<Located<String>>,
+    /// Optional review-surface authorization scopes; lowered sorted and deduplicated.
+    pub authorization: Vec<Located<String>>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

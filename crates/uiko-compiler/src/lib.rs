@@ -4,8 +4,8 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use uiko_capabilities::{CapabilityCatalog, QueryOperation};
 use uiko_core::{
-    AppIr, ComponentIr, ComponentKindIr, Diagnostic, Located, ModuleIr, PageIr, PageStateIr,
-    QueryInputIr, QueryIr, SelectOptionIr, Severity, StateValueIr,
+    AppIr, ComponentIr, ComponentKindIr, Diagnostic, ExecutionModeIr, Located, ModuleIr, PageIr,
+    PageStateIr, QueryInputIr, QueryIr, SelectOptionIr, Severity, StateValueIr,
 };
 use uiko_source::{
     AppSource, ComponentKindSource, ComponentSource, PageSource, QuerySource, StateValueSource,
@@ -231,6 +231,34 @@ fn lower_queries<'a>(
             continue;
         }
 
+        let execution = match query.value.execution.as_ref() {
+            None => ExecutionModeIr::Managed,
+            Some(declared) => match declared.value.as_str() {
+                "managed" => ExecutionModeIr::Managed,
+                "unmanaged" => ExecutionModeIr::Unmanaged,
+                other => {
+                    diagnostics.push(Diagnostic::error(
+                        "UIKO2115",
+                        format!("unsupported execution mode `{other}`; expected `managed` or `unmanaged`"),
+                        declared.span.clone(),
+                    ));
+                    continue;
+                }
+            },
+        };
+
+        let mut scopes = BTreeSet::new();
+        for scope in &query.value.authorization {
+            if !scopes.insert(scope.value.clone()) {
+                diagnostics.push(Diagnostic::error(
+                    "UIKO2116",
+                    format!("duplicate authorization scope `{}`", scope.value),
+                    scope.span.clone(),
+                ));
+            }
+        }
+        let required_scopes: Vec<String> = scopes.into_iter().collect();
+
         queries.push(QueryIr {
             id: format!(
                 "{module_id}.{}.query.{}",
@@ -248,6 +276,8 @@ fn lower_queries<'a>(
                     expression: binding.value.expression.value.clone(),
                 })
                 .collect(),
+            execution,
+            required_scopes,
             output: operation.output.clone(),
         });
         query_aliases.insert(query.value.id.value.clone(), operation);
@@ -508,7 +538,7 @@ mod tests {
         CapabilityCatalog, CapabilityProvider, ObjectField, OperationParameter, ParameterLocation,
         QueryOperation, ValueKind, ValueShape,
     };
-    use uiko_core::{Located, ModuleId, SourceId, TextSpan};
+    use uiko_core::{ExecutionModeIr, Located, ModuleId, SourceId, TextSpan};
     use uiko_source::{
         AppSource, ComponentKindSource, ComponentSource, InputBindingSource, ModuleSource,
         PageSource, PageStateSource, QuerySource, StateValueSource,
@@ -598,6 +628,8 @@ mod tests {
                                             },
                                             "features/customers/detail.jsonc",
                                         )],
+                                        execution: None,
+                                        authorization: Vec::new(),
                                     },
                                     "features/customers/detail.jsonc",
                                 )],
@@ -727,6 +759,78 @@ mod tests {
             diagnostics
                 .iter()
                 .any(|diagnostic| diagnostic.code == "UIKO2111")
+        );
+    }
+
+    #[test]
+    fn execution_mode_defaults_to_managed() {
+        let ir = compile(&app(), &catalog()).expect("valid source");
+        assert_eq!(
+            ir.modules[0].pages[0].queries[0].execution,
+            ExecutionModeIr::Managed
+        );
+    }
+
+    #[test]
+    fn unmanaged_execution_declares_escape_mode() {
+        let mut source = app();
+        source.value.modules[0].value.pages[0].value.queries[0]
+            .value
+            .execution = Some(at("unmanaged".into(), "features/customers/detail.jsonc"));
+
+        let ir = compile(&source, &catalog()).expect("valid source");
+        assert_eq!(
+            ir.modules[0].pages[0].queries[0].execution,
+            ExecutionModeIr::Unmanaged
+        );
+    }
+
+    #[test]
+    fn unsupported_execution_mode_fails_closed() {
+        let mut source = app();
+        source.value.modules[0].value.pages[0].value.queries[0]
+            .value
+            .execution = Some(at("supervised".into(), "features/customers/detail.jsonc"));
+
+        let diagnostics = compile(&source, &catalog()).unwrap_err();
+        assert!(
+            diagnostics
+                .iter()
+                .any(|diagnostic| diagnostic.code == "UIKO2115")
+        );
+    }
+
+    #[test]
+    fn duplicate_authorization_scope_fails() {
+        let mut source = app();
+        let query = &mut source.value.modules[0].value.pages[0].value.queries[0].value;
+        query.authorization = vec![
+            at("crm:read".into(), "features/customers/detail.jsonc"),
+            at("crm:read".into(), "features/customers/detail.jsonc"),
+        ];
+
+        let diagnostics = compile(&source, &catalog()).unwrap_err();
+        assert!(
+            diagnostics
+                .iter()
+                .any(|diagnostic| diagnostic.code == "UIKO2116")
+        );
+    }
+
+    #[test]
+    fn authorization_scopes_lower_sorted_and_deduplicated() {
+        let mut source = app();
+        source.value.modules[0].value.pages[0].value.queries[0]
+            .value
+            .authorization = vec![
+            at("crm:read".into(), "features/customers/detail.jsonc"),
+            at("admin:all".into(), "features/customers/detail.jsonc"),
+        ];
+
+        let ir = compile(&source, &catalog()).expect("valid source");
+        assert_eq!(
+            ir.modules[0].pages[0].queries[0].required_scopes,
+            vec!["admin:all".to_string(), "crm:read".to_string()]
         );
     }
 }
