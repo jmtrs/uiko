@@ -78,7 +78,6 @@ impl GatewayState {
     }
 }
 
-#[must_use]
 pub fn router(state: GatewayState) -> Router {
     Router::new()
         .route("/__uiko/query", post(invoke_query))
