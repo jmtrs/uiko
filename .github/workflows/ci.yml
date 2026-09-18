@@ -155,6 +155,15 @@ jobs:
         run: npm run typecheck
       - name: Build
         run: npm run build
+      - name: D05 prerequisite base typechecks
+        run: |
+          base="$(git rev-parse HEAD)"
+          git reset --hard --quiet "$base"
+          rm -f package-lock.json src/api/generated/schema.d.ts
+          bash ../../../experiments/g0/materialize-prerequisite-base.sh R_RENDER_ONLY G0-D05 ../../..
+          npm run generate:api
+          npm run typecheck
+          git reset --hard --quiet "$base"
 
   t-authoring:
     runs-on: ubuntu-latest
@@ -177,6 +186,19 @@ jobs:
         run: npm run build
       - name: Empty authoring base emits zero routes
         run: jq -e '(.routes | length) == 0' generated/app.uiko-manifest.json > /dev/null
+      - name: D05 prerequisite base lowers through real compiler
+        run: |
+          base="$(git rev-parse HEAD)"
+          git reset --hard --quiet "$base"
+          rm -rf generated package-lock.json
+          bash ../../../experiments/g0/materialize-prerequisite-base.sh T_AUTHORING G0-D05 ../../..
+          npm run build
+          jq -e '
+            (.routes | length) == 1
+            and (.routes[0].path == "/customers")
+            and (.routes[0].components | any(.kind == "Select"))
+          ' generated/app.uiko-manifest.json > /dev/null
+          git reset --hard --quiet "$base"
 
   g0-harness:
     runs-on: ubuntu-latest
@@ -266,6 +288,8 @@ jobs:
             and .taskBases.T_AUTHORING["G0-D05"] == "D03"
             and (.templates.B_FULL | keys == ["D01","D02","D03"])
             and (.templates.C_UIKO | keys == ["D01","D02","D03"])
+            and (.templates.R_RENDER_ONLY | keys == ["D03"])
+            and (.templates.T_AUTHORING | keys == ["D03"])
           ' experiments/g0/prerequisite-bases.json > /dev/null
       - name: G0 task set and probes are frozen
         run: |
