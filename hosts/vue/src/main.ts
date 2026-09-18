@@ -1,8 +1,4 @@
-import {
-  Renderer,
-  StateProvider,
-  VisibilityProvider,
-} from "@json-render/vue";
+import { JSONUIProvider, Renderer } from "@json-render/vue";
 import { createApp, defineComponent, h, ref } from "vue";
 
 import { registry } from "./catalog";
@@ -192,25 +188,18 @@ async function bootstrap(): Promise<void> {
           [
             status,
             h(
-              StateProvider,
-              { initialState: {} },
+              JSONUIProvider,
+              { registry, initialState: {} },
               {
                 default: () =>
-                  h(
-                    VisibilityProvider,
-                    null,
-                    {
-                      default: () =>
-                        h(Renderer, {
-                          spec: toJsonRenderSpec(
-                            match.route,
-                            queryData.value,
-                            pageState.value,
-                          ),
-                          registry,
-                        }),
-                    },
-                  ),
+                  h(Renderer, {
+                    spec: toJsonRenderSpec(
+                      match.route,
+                      queryData.value,
+                      pageState.value,
+                    ),
+                    registry,
+                  }),
               },
             ),
           ],
