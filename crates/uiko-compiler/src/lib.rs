@@ -2,12 +2,14 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use uiko_capabilities::{CapabilityCatalog, QueryOperation};
+use uiko_capabilities::{CapabilityCatalog, QueryOperation, ValueShape};
 use uiko_core::{
     AppIr, ComponentIr, ComponentKindIr, Diagnostic, Located, ModuleIr, PageIr, QueryInputIr,
-    QueryIr, Severity,
+    QueryIr, ScalarValue, SelectOptionIr, Severity, StateIr, TableColumnIr,
 };
-use uiko_source::{AppSource, ComponentKindSource, ComponentSource, PageSource, QuerySource};
+use uiko_source::{
+    AppSource, ComponentKindSource, ComponentSource, PageSource, QuerySource, StateSource,
+};
 
 pub const SUPPORTED_SPEC_VERSION: u32 = 1;
 
@@ -58,6 +60,20 @@ pub fn compile(
                     ),
                     page.value.id.span.clone(),
                 ));
+            }
+
+            let mut state_ids = BTreeSet::new();
+            for state in &page.value.state {
+                if !state_ids.insert(state.value.id.value.clone()) {
+                    diagnostics.push(Diagnostic::error(
+                        "UIKO1104",
+                        format!(
+                            "duplicate state key `{}` in page `{}`",
+                            state.value.id.value, page.value.id.value
+                        ),
+                        state.value.id.span.clone(),
+                    ));
+                }
             }
 
             let mut component_ids = BTreeSet::new();
@@ -112,6 +128,11 @@ fn lower_page(
     capabilities: &CapabilityCatalog,
 ) -> Result<PageIr, Vec<Diagnostic>> {
     let route_parameters = route_parameters(&page.route.value);
+    let state = page
+        .state
+        .iter()
+        .map(|entry| (entry.value.id.value.clone(), &entry.value))
+        .collect::<BTreeMap<_, _>>();
     let mut diagnostics = Vec::new();
     let mut query_aliases = BTreeMap::<String, &QueryOperation>::new();
     let mut queries = Vec::with_capacity(page.queries.len());
@@ -158,7 +179,8 @@ fn lower_page(
             continue;
         };
 
-        let query_diagnostics = validate_query_input(&query.value, operation, &route_parameters);
+        let query_diagnostics =
+            validate_query_input(&query.value, operation, &route_parameters, &state);
         if !query_diagnostics.is_empty() {
             diagnostics.extend(query_diagnostics);
             continue;
@@ -177,9 +199,17 @@ fn lower_page(
                 .value
                 .input
                 .iter()
-                .map(|binding| QueryInputIr {
-                    name: binding.value.name.value.clone(),
-                    expression: binding.value.expression.value.clone(),
+                .filter_map(|binding| {
+                    let required = operation
+                        .parameters
+                        .iter()
+                        .find(|parameter| parameter.name == binding.value.name.value)
+                        .map(|parameter| parameter.required)?;
+                    Some(QueryInputIr {
+                        name: binding.value.name.value.clone(),
+                        expression: binding.value.expression.value.clone(),
+                        required,
+                    })
                 })
                 .collect(),
             output: operation.output.clone(),
@@ -188,16 +218,13 @@ fn lower_page(
     }
 
     for component in &page.components {
-        let binding = match &component.value.kind {
-            ComponentKindSource::Field { binding, .. } | ComponentKindSource::Table { binding } => {
-                Some(binding.as_str())
-            }
-            ComponentKindSource::Text { .. } => None,
-        };
-
-        if let Some(binding) = binding {
-            validate_component_binding(binding, &query_aliases, &component.span, &mut diagnostics);
-        }
+        validate_component(
+            &component.value,
+            &component.span,
+            &query_aliases,
+            &state,
+            &mut diagnostics,
+        );
     }
 
     if !diagnostics.is_empty() {
@@ -207,6 +234,11 @@ fn lower_page(
     Ok(PageIr {
         id: page.id.value.clone(),
         route: page.route.value.clone(),
+        state: page
+            .state
+            .iter()
+            .map(|entry| lower_state(&entry.value))
+            .collect(),
         queries,
         components: page
             .components
@@ -220,6 +252,7 @@ fn validate_query_input(
     query: &QuerySource,
     operation: &QueryOperation,
     route_parameters: &BTreeSet<String>,
+    state: &BTreeMap<String, &StateSource>,
 ) -> Vec<Diagnostic> {
     let mut diagnostics = Vec::new();
     let mut supplied = BTreeSet::new();
@@ -235,11 +268,12 @@ fn validate_query_input(
             continue;
         }
 
-        if !operation
+        let parameter = operation
             .parameters
             .iter()
-            .any(|parameter| parameter.name == name)
-        {
+            .find(|parameter| parameter.name == name);
+
+        if parameter.is_none() {
             diagnostics.push(Diagnostic::error(
                 "UIKO2105",
                 format!("operation has no input parameter `{name}`"),
@@ -248,22 +282,47 @@ fn validate_query_input(
         }
 
         let expression = binding.value.expression.value.as_str();
-        let Some(route_parameter) = expression.strip_prefix("route.") else {
-            diagnostics.push(Diagnostic::error(
-                "UIKO2106",
-                format!("M4 input binding `{expression}` is unsupported; expected route.<param>"),
-                binding.value.expression.span.clone(),
-            ));
+        if let Some(route_parameter) = expression.strip_prefix("route.") {
+            if !route_parameters.contains(route_parameter) {
+                diagnostics.push(Diagnostic::error(
+                    "UIKO2107",
+                    format!("route has no parameter `{route_parameter}`"),
+                    binding.value.expression.span.clone(),
+                ));
+            }
             continue;
-        };
-
-        if !route_parameters.contains(route_parameter) {
-            diagnostics.push(Diagnostic::error(
-                "UIKO2107",
-                format!("route has no parameter `{route_parameter}`"),
-                binding.value.expression.span.clone(),
-            ));
         }
+
+        if let Some(state_key) = expression.strip_prefix("state.") {
+            let Some(state_entry) = state.get(state_key) else {
+                diagnostics.push(Diagnostic::error(
+                    "UIKO2112",
+                    format!("page has no state key `{state_key}`"),
+                    binding.value.expression.span.clone(),
+                ));
+                continue;
+            };
+            if parameter.is_some_and(|parameter| parameter.required)
+                && matches!(state_entry.initial.value, ScalarValue::Null)
+            {
+                diagnostics.push(Diagnostic::error(
+                    "UIKO2113",
+                    format!(
+                        "required operation input `{name}` cannot bind to initially null state `{state_key}`"
+                    ),
+                    binding.value.expression.span.clone(),
+                ));
+            }
+            continue;
+        }
+
+        diagnostics.push(Diagnostic::error(
+            "UIKO2106",
+            format!(
+                "unsupported input binding `{expression}`; expected route.<param> or state.<key>"
+            ),
+            binding.value.expression.span.clone(),
+        ));
     }
 
     for parameter in operation
@@ -286,33 +345,127 @@ fn validate_query_input(
     diagnostics
 }
 
+fn validate_component(
+    component: &ComponentSource,
+    span: &uiko_core::TextSpan,
+    queries: &BTreeMap<String, &QueryOperation>,
+    state: &BTreeMap<String, &StateSource>,
+    diagnostics: &mut Vec<Diagnostic>,
+) {
+    match &component.kind {
+        ComponentKindSource::Text { .. } => {}
+        ComponentKindSource::Field { binding, .. } => {
+            validate_component_binding(binding, queries, span, diagnostics);
+        }
+        ComponentKindSource::Table { binding, columns } => {
+            let Some(shape) = resolve_component_binding(binding, queries, span, diagnostics) else {
+                return;
+            };
+            let Some(item) = shape.array_item() else {
+                diagnostics.push(Diagnostic::error(
+                    "UIKO2114",
+                    format!("Table binding `{binding}` must resolve to an array"),
+                    span.clone(),
+                ));
+                return;
+            };
+            for column in columns {
+                if item.at_path(column.binding.split('.')).is_none() {
+                    diagnostics.push(Diagnostic::error(
+                        "UIKO2115",
+                        format!(
+                            "Table column binding `{}` does not exist on items from `{binding}`",
+                            column.binding
+                        ),
+                        span.clone(),
+                    ));
+                }
+            }
+        }
+        ComponentKindSource::Select {
+            state: state_key, ..
+        } => {
+            if !state.contains_key(state_key) {
+                diagnostics.push(Diagnostic::error(
+                    "UIKO2116",
+                    format!("Select references unknown state key `{state_key}`"),
+                    span.clone(),
+                ));
+            }
+        }
+        ComponentKindSource::Pagination {
+            page_state,
+            page_binding,
+            page_size_binding,
+            total_binding,
+        } => {
+            match state.get(page_state) {
+                Some(entry) if matches!(entry.initial.value, ScalarValue::Number(_)) => {}
+                Some(_) => diagnostics.push(Diagnostic::error(
+                    "UIKO2117",
+                    format!("Pagination page state `{page_state}` must be numeric"),
+                    span.clone(),
+                )),
+                None => diagnostics.push(Diagnostic::error(
+                    "UIKO2116",
+                    format!("Pagination references unknown state key `{page_state}`"),
+                    span.clone(),
+                )),
+            }
+
+            for binding in [page_binding, page_size_binding, total_binding] {
+                let Some(shape) = resolve_component_binding(binding, queries, span, diagnostics)
+                else {
+                    continue;
+                };
+                if !shape.is_numeric() {
+                    diagnostics.push(Diagnostic::error(
+                        "UIKO2118",
+                        format!("Pagination binding `{binding}` must resolve to a number"),
+                        span.clone(),
+                    ));
+                }
+            }
+        }
+    }
+}
+
 fn validate_component_binding(
     binding: &str,
     queries: &BTreeMap<String, &QueryOperation>,
     span: &uiko_core::TextSpan,
     diagnostics: &mut Vec<Diagnostic>,
 ) {
+    let _ = resolve_component_binding(binding, queries, span, diagnostics);
+}
+
+fn resolve_component_binding<'a>(
+    binding: &str,
+    queries: &BTreeMap<String, &'a QueryOperation>,
+    span: &uiko_core::TextSpan,
+    diagnostics: &mut Vec<Diagnostic>,
+) -> Option<&'a ValueShape> {
     let mut segments = binding.split('.');
-    let Some(alias) = segments.next() else {
-        return;
-    };
+    let alias = segments.next()?;
     let Some(operation) = queries.get(alias) else {
         diagnostics.push(Diagnostic::error(
             "UIKO2110",
             format!("binding `{binding}` references unknown query `{alias}`"),
             span.clone(),
         ));
-        return;
+        return None;
     };
 
     let path: Vec<_> = segments.collect();
-    if !operation.output.supports_path(path.iter().copied()) {
+    let shape = operation.output.at_path(path.iter().copied());
+    if shape.is_none() {
         diagnostics.push(Diagnostic::error(
             "UIKO2111",
             format!("binding `{binding}` does not exist in output of query `{alias}`"),
             span.clone(),
         ));
     }
+    shape
 }
 
 fn parse_operation_reference(reference: &str) -> Option<(&str, &str)> {
@@ -332,6 +485,13 @@ fn route_parameters(route: &str) -> BTreeSet<String> {
         .collect()
 }
 
+fn lower_state(state: &StateSource) -> StateIr {
+    StateIr {
+        id: state.id.value.clone(),
+        initial: state.initial.value.clone(),
+    }
+}
+
 fn lower_component(component: &ComponentSource) -> ComponentIr {
     ComponentIr {
         id: component.id.value.clone(),
@@ -339,12 +499,50 @@ fn lower_component(component: &ComponentSource) -> ComponentIr {
             ComponentKindSource::Text { value } => ComponentKindIr::Text {
                 value: value.clone(),
             },
-            ComponentKindSource::Field { label, binding } => ComponentKindIr::Field {
+            ComponentKindSource::Field {
+                label,
+                binding,
+                fallback,
+            } => ComponentKindIr::Field {
                 label: label.clone(),
                 binding: binding.clone(),
+                fallback: fallback.clone(),
             },
-            ComponentKindSource::Table { binding } => ComponentKindIr::Table {
+            ComponentKindSource::Table { binding, columns } => ComponentKindIr::Table {
                 binding: binding.clone(),
+                columns: columns
+                    .iter()
+                    .map(|column| TableColumnIr {
+                        label: column.label.clone(),
+                        binding: column.binding.clone(),
+                    })
+                    .collect(),
+            },
+            ComponentKindSource::Select {
+                label,
+                state,
+                options,
+            } => ComponentKindIr::Select {
+                label: label.clone(),
+                state: state.clone(),
+                options: options
+                    .iter()
+                    .map(|option| SelectOptionIr {
+                        label: option.label.clone(),
+                        value: option.value.clone(),
+                    })
+                    .collect(),
+            },
+            ComponentKindSource::Pagination {
+                page_state,
+                page_binding,
+                page_size_binding,
+                total_binding,
+            } => ComponentKindIr::Pagination {
+                page_state: page_state.clone(),
+                page_binding: page_binding.clone(),
+                page_size_binding: page_size_binding.clone(),
+                total_binding: total_binding.clone(),
             },
         },
     }
@@ -358,10 +556,10 @@ mod tests {
         CapabilityCatalog, CapabilityProvider, ObjectField, OperationParameter, ParameterLocation,
         QueryOperation, ValueKind, ValueShape,
     };
-    use uiko_core::{Located, ModuleId, SourceId, TextSpan};
+    use uiko_core::{Located, ModuleId, ScalarValue, SourceId, TextSpan};
     use uiko_source::{
         AppSource, ComponentKindSource, ComponentSource, InputBindingSource, ModuleSource,
-        PageSource, QuerySource,
+        PageSource, QuerySource, StateSource,
     };
 
     use super::{SUPPORTED_SPEC_VERSION, compile};
@@ -373,16 +571,28 @@ mod tests {
     fn catalog() -> CapabilityCatalog {
         let output = ValueShape {
             nullable: false,
-            kind: ValueKind::Object(BTreeMap::from([(
-                "name".into(),
-                ObjectField {
-                    required: true,
-                    value: ValueShape {
-                        nullable: false,
-                        kind: ValueKind::String,
+            kind: ValueKind::Object(BTreeMap::from([
+                (
+                    "name".into(),
+                    ObjectField {
+                        required: true,
+                        value: ValueShape {
+                            nullable: false,
+                            kind: ValueKind::String,
+                        },
                     },
-                },
-            )])),
+                ),
+                (
+                    "page".into(),
+                    ObjectField {
+                        required: true,
+                        value: ValueShape {
+                            nullable: false,
+                            kind: ValueKind::Integer,
+                        },
+                    },
+                ),
+            ])),
         };
         CapabilityCatalog {
             providers: BTreeMap::from([(
@@ -393,11 +603,18 @@ mod tests {
                         "getCustomer".into(),
                         QueryOperation {
                             external_id: "getCustomer".into(),
-                            parameters: vec![OperationParameter {
-                                name: "customerId".into(),
-                                location: ParameterLocation::Path,
-                                required: true,
-                            }],
+                            parameters: vec![
+                                OperationParameter {
+                                    name: "customerId".into(),
+                                    location: ParameterLocation::Path,
+                                    required: true,
+                                },
+                                OperationParameter {
+                                    name: "status".into(),
+                                    location: ParameterLocation::Query,
+                                    required: false,
+                                },
+                            ],
                             output,
                         },
                     )]),
@@ -424,6 +641,7 @@ mod tests {
                                     "/customers/:customerId".into(),
                                     "features/customers/detail.jsonc",
                                 ),
+                                state: vec![],
                                 queries: vec![at(
                                     QuerySource {
                                         id: at(
@@ -456,6 +674,7 @@ mod tests {
                                         kind: ComponentKindSource::Field {
                                             label: "Name".into(),
                                             binding: "customer.name".into(),
+                                            fallback: None,
                                         },
                                     },
                                     "features/customers/detail.jsonc",
@@ -479,6 +698,54 @@ mod tests {
         assert_eq!(query.provider_id, "crm");
         assert_eq!(query.external_operation_id, "getCustomer");
         assert_eq!(query.input[0].expression, "route.customerId");
+        assert!(query.input[0].required);
+    }
+
+    #[test]
+    fn optional_state_input_compiles_and_is_marked_optional() {
+        let mut source = app();
+        source.value.modules[0].value.pages[0].value.state.push(at(
+            StateSource {
+                id: at("status".into(), "features/customers/detail.jsonc"),
+                initial: at(ScalarValue::Null, "features/customers/detail.jsonc"),
+            },
+            "features/customers/detail.jsonc",
+        ));
+        source.value.modules[0].value.pages[0].value.queries[0]
+            .value
+            .input
+            .push(at(
+                InputBindingSource {
+                    name: at("status".into(), "features/customers/detail.jsonc"),
+                    expression: at("state.status".into(), "features/customers/detail.jsonc"),
+                },
+                "features/customers/detail.jsonc",
+            ));
+
+        let ir = compile(&source, &catalog()).expect("optional state input");
+        assert!(!ir.modules[0].pages[0].queries[0].input[1].required);
+    }
+
+    #[test]
+    fn unknown_state_input_fails_before_browser_execution() {
+        let mut source = app();
+        source.value.modules[0].value.pages[0].value.queries[0]
+            .value
+            .input
+            .push(at(
+                InputBindingSource {
+                    name: at("status".into(), "features/customers/detail.jsonc"),
+                    expression: at("state.missing".into(), "features/customers/detail.jsonc"),
+                },
+                "features/customers/detail.jsonc",
+            ));
+
+        let diagnostics = compile(&source, &catalog()).unwrap_err();
+        assert!(
+            diagnostics
+                .iter()
+                .any(|diagnostic| diagnostic.code == "UIKO2112")
+        );
     }
 
     #[test]
@@ -523,6 +790,7 @@ mod tests {
             .kind = ComponentKindSource::Field {
             label: "Broken".into(),
             binding: "customer.missing".into(),
+            fallback: None,
         };
 
         let diagnostics = compile(&source, &catalog()).unwrap_err();
