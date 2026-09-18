@@ -1,0 +1,15 @@
+[package]
+name = "uiko-openapi"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+oas3 = "=0.22.0"
+serde_json = "1"
+uiko-capabilities = { path = "../uiko-capabilities" }
+uiko-core = { path = "../uiko-core" }
+
+[lints]
+workspace = true
