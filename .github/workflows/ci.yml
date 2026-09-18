@@ -360,6 +360,8 @@ jobs:
             and .tokenization.pattern == "[\\p{L}\\p{N}_]+|[^\\s]"
             and .tokenization.diffAlgorithm == "Myers diff over token sequences"
             and (.arms.C_UIKO.coreOwned | index("hosts/**") != null)
+            and (.arms.T_AUTHORING.coreOwned | index("hosts/**") != null)
+            and (.arms.T_AUTHORING.coreOwned | index("Cargo.toml") != null)
           ' experiments/g0/path-policy.json > /dev/null
       - name: G0 trace schema is versioned and arm-neutral
         run: |
