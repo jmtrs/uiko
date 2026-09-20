@@ -232,14 +232,93 @@ impl DiffReport {
             };
             writeln!(output, "UIKO-DIFF {} {}{}", row.kind, row.target, marker)
                 .expect("writing to String cannot fail");
-            if let Some(before) = &row.before {
-                writeln!(output, "  before: {before}").expect("writing to String cannot fail");
-            }
-            if let Some(after) = &row.after {
-                writeln!(output, "  after: {after}").expect("writing to String cannot fail");
+            match (&row.before, &row.after) {
+                // Both sides present and at least one is structured: print a
+                // field-level delta instead of two opaque single-line blobs, so
+                // a human reviewer sees only what changed. The JSON envelope
+                // still carries the full before/after for machines.
+                (Some(before), Some(after)) if is_structured(before) || is_structured(after) => {
+                    let mut lines = Vec::new();
+                    structural_delta(before, after, String::new(), &mut lines);
+                    if lines.is_empty() {
+                        writeln!(output, "  before: {before}")
+                            .expect("writing to String cannot fail");
+                        writeln!(output, "  after: {after}")
+                            .expect("writing to String cannot fail");
+                    } else {
+                        output.push_str("  changes:\n");
+                        for line in lines {
+                            writeln!(output, "    {line}").expect("writing to String cannot fail");
+                        }
+                    }
+                }
+                _ => {
+                    if let Some(before) = &row.before {
+                        writeln!(output, "  before: {before}")
+                            .expect("writing to String cannot fail");
+                    }
+                    if let Some(after) = &row.after {
+                        writeln!(output, "  after: {after}")
+                            .expect("writing to String cannot fail");
+                    }
+                }
             }
         }
         output
+    }
+}
+
+/// True for values whose single-line rendering is unreadable at size: objects
+/// and arrays. Scalars stay on the plain `before:`/`after:` lines.
+fn is_structured(value: &JsonValue) -> bool {
+    matches!(value, JsonValue::Obj(_) | JsonValue::Arr(_))
+}
+
+/// Path-addressed structural delta between two payloads. Emits one line per
+/// changed leaf: `~ path: before -> after`, `+ path: added`, `- path: removed`.
+/// Deterministic: object keys walked in sorted order, arrays by index.
+fn structural_delta(before: &JsonValue, after: &JsonValue, path: String, out: &mut Vec<String>) {
+    if before == after {
+        return;
+    }
+    match (before, after) {
+        (JsonValue::Obj(a), JsonValue::Obj(b)) => {
+            let a_map: BTreeMap<&str, &JsonValue> = a.iter().map(|(k, v)| (*k, v)).collect();
+            let b_map: BTreeMap<&str, &JsonValue> = b.iter().map(|(k, v)| (*k, v)).collect();
+            let keys: BTreeSet<&str> = a_map.keys().chain(b_map.keys()).copied().collect();
+            for key in keys {
+                let child = if path.is_empty() {
+                    key.to_string()
+                } else {
+                    format!("{path}.{key}")
+                };
+                match (a_map.get(key), b_map.get(key)) {
+                    (Some(bv), Some(av)) => structural_delta(bv, av, child, out),
+                    (Some(bv), None) => out.push(format!("- {child}: {bv}")),
+                    (None, Some(av)) => out.push(format!("+ {child}: {av}")),
+                    (None, None) => {}
+                }
+            }
+        }
+        (JsonValue::Arr(a), JsonValue::Arr(b)) => {
+            for index in 0..a.len().max(b.len()) {
+                let child = format!("{path}[{index}]");
+                match (a.get(index), b.get(index)) {
+                    (Some(bv), Some(av)) => structural_delta(bv, av, child, out),
+                    (Some(bv), None) => out.push(format!("- {child}: {bv}")),
+                    (None, Some(av)) => out.push(format!("+ {child}: {av}")),
+                    (None, None) => {}
+                }
+            }
+        }
+        _ => {
+            let label = if path.is_empty() {
+                "value".to_string()
+            } else {
+                path
+            };
+            out.push(format!("~ {label}: {before} -> {after}"));
+        }
     }
 }
 
@@ -1291,6 +1370,97 @@ mod tests {
             first.to_json(),
             r#"{"status":"changed","rows":[{"kind":"app.name.changed","target":"app","securitySignificant":false,"before":"support-console","after":"renamed"},{"kind":"page.route.changed","target":"customers.CustomerList","securitySignificant":false,"before":"/customers","after":"/clients"}]}"#
         );
+    }
+
+    #[test]
+    fn structured_row_renders_field_level_delta() {
+        use super::{DiffReport, DiffRow, DiffStatus, JsonValue};
+
+        let leaf = |required: bool| {
+            JsonValue::Obj(vec![
+                (
+                    "kind",
+                    JsonValue::Obj(vec![(
+                        "object",
+                        JsonValue::Arr(vec![JsonValue::Obj(vec![
+                            ("name", JsonValue::Str("total".into())),
+                            ("required", JsonValue::Bool(required)),
+                        ])]),
+                    )]),
+                ),
+                ("nullable", JsonValue::Bool(false)),
+            ])
+        };
+        let report = DiffReport {
+            status: DiffStatus::Changed,
+            rows: vec![DiffRow {
+                kind: "query.output.changed".into(),
+                target: "customers.CustomerList.query.customers".into(),
+                before: Some(leaf(true)),
+                after: Some(leaf(false)),
+                security_significant: true,
+            }],
+        };
+
+        let human = report.to_human();
+        assert!(human.contains("  changes:\n"), "{human}");
+        assert!(
+            human.contains("~ kind.object[0].required: true -> false"),
+            "{human}"
+        );
+        // The opaque single-line blob must not be printed for structured rows.
+        assert!(!human.contains("  before: {"), "{human}");
+        assert!(!human.contains("  after: {"), "{human}");
+        assert!(human.contains("security-significant"), "{human}");
+    }
+
+    #[test]
+    fn array_element_removal_renders_minus_line() {
+        use super::{DiffReport, DiffRow, DiffStatus, JsonValue};
+
+        let report = DiffReport {
+            status: DiffStatus::Changed,
+            rows: vec![DiffRow {
+                kind: "component.options.changed".into(),
+                target: "customers.CustomerList.status".into(),
+                before: Some(JsonValue::Arr(vec![
+                    JsonValue::Str("active".into()),
+                    JsonValue::Str("inactive".into()),
+                ])),
+                after: Some(JsonValue::Arr(vec![JsonValue::Str("active".into())])),
+                security_significant: false,
+            }],
+        };
+
+        let human = report.to_human();
+        assert!(human.contains(r#"- [1]: "inactive""#), "{human}");
+    }
+
+    #[test]
+    fn scalar_row_keeps_plain_before_after() {
+        use super::{DiffReport, DiffRow, DiffStatus, JsonValue};
+
+        let report = DiffReport {
+            status: DiffStatus::Changed,
+            rows: vec![DiffRow {
+                kind: "page.route.changed".into(),
+                target: "customers.CustomerDetail".into(),
+                before: Some(JsonValue::Str("/customers/:customerId".into())),
+                after: Some(JsonValue::Str("/accounts/:customerId".into())),
+                security_significant: false,
+            }],
+        };
+
+        let human = report.to_human();
+        assert!(
+            human.contains("  before: \"/customers/:customerId\""),
+            "{human}"
+        );
+        assert!(
+            human.contains("  after: \"/accounts/:customerId\""),
+            "{human}"
+        );
+        assert!(!human.contains("changes:"), "{human}");
     }
 
     #[test]
