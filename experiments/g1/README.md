@@ -37,8 +37,14 @@ node experiments/g1/run.mjs --handout  # one self-contained packet/handout.md to
 node experiments/g1/score.mjs          # score reviewers/*.csv -> GO/NO-GO
 ```
 
-To run the panel: `--handout`, send `packet/handout.md` to each reviewer, save
-each reply as `reviewers/<name>.csv`, then `score.mjs`.
+Solo reviewer, fastest path — one key per diff, auto-saves and scores:
+
+```bash
+node experiments/g1/run.mjs --review me
+```
+
+Remote reviewers instead: `--handout`, send `packet/handout.md`, save each reply
+as `reviewers/<name>.csv`, then `score.mjs`.
 
 See [protocol.md](./protocol.md) for the reviewer procedure and the frozen
 GO/NO-GO rule.

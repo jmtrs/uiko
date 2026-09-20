@@ -199,8 +199,83 @@ function handout() {
   console.log("Send that one file to each reviewer. Save each reply as experiments/g1/reviewers/<name>.csv, then run score.mjs.");
 }
 
+// Manual line reader over stdin — works at a TTY and with piped input, unlike
+// readline.question (which abandons pending prompts on pipe EOF).
+function makeLineReader() {
+  const queue = [];
+  const waiters = [];
+  let ended = false;
+  let buf = "";
+  process.stdin.setEncoding("utf8");
+  process.stdin.on("data", (d) => {
+    buf += d;
+    let i;
+    while ((i = buf.indexOf("\n")) >= 0) {
+      const line = buf.slice(0, i).replace(/\r$/, "");
+      buf = buf.slice(i + 1);
+      if (waiters.length) waiters.shift()(line);
+      else queue.push(line);
+    }
+  });
+  process.stdin.on("end", () => {
+    ended = true;
+    while (waiters.length) waiters.shift()(null);
+  });
+  return (prompt) =>
+    new Promise((res) => {
+      if (prompt) process.stdout.write(prompt);
+      if (queue.length) res(queue.shift());
+      else if (ended) res(null);
+      else waiters.push(res);
+    });
+}
+
+// Interactive one-key review: shows each diff, reads a single verdict key,
+// writes reviewers/<name>.csv, then scores. Fastest path for a solo reviewer.
+async function review() {
+  const name = (process.argv[3] ?? "me").replace(/[^a-z0-9_-]/gi, "");
+  packet();
+  const order = JSON.parse(readFileSync(join(here, "packet", "packet-manifest.json"), "utf8")).order;
+  const ask = makeLineReader();
+  const esc = (s) => (/[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s);
+
+  const rows = ["label,verdict,description,intelligibility,note"];
+  console.log(`\nReviewing as "${name}". Per diff: c / n / u  (Ctrl-C to abort)`);
+  for (const { label } of order) {
+    const diff = readFileSync(join(here, "packet", `${label}.diff.txt`), "utf8").trimEnd();
+    console.log("\n" + "=".repeat(64) + `\n${label}\n` + diff);
+    let verdict = "", intelligibility = "intelligible", description = "";
+    for (;;) {
+      const raw = await ask("\n  [c]hange  [n]o-op  [u]nreadable-change ? ");
+      if (raw === null) { console.log("\naborted — no file written"); process.exit(1); }
+      const a = raw.trim().toLowerCase();
+      if (a === "n") { verdict = "clean"; break; }
+      if (a === "c") { verdict = "consequential"; break; }
+      if (a === "u") { verdict = "consequential"; intelligibility = "unintelligible"; break; }
+      console.log("  (type c, n, or u)");
+    }
+    if (verdict === "consequential") {
+      const d = await ask("  one line — what changed? (Enter to skip) ");
+      description = (d ?? "").trim();
+    }
+    rows.push([label, verdict, esc(description), intelligibility, ""].join(","));
+  }
+
+  const reviewersDir = join(here, "reviewers");
+  mkdirSync(reviewersDir, { recursive: true });
+  writeFileSync(join(reviewersDir, `${name}.csv`), rows.join("\n") + "\n");
+  console.log(`\nSaved experiments/g1/reviewers/${name}.csv\n\nScoring...\n`);
+  try {
+    execFileSync(process.execPath, [join(here, "score.mjs")], { stdio: "inherit" });
+  } catch {
+    /* score.mjs exits non-zero on NO-GO; its report already printed */
+  }
+  process.exit(0);
+}
+
 const mode = process.argv[2];
 if (mode === "--check") check();
 else if (mode === "--packet") packet();
 else if (mode === "--handout") handout();
+else if (mode === "--review") review();
 else summary();
