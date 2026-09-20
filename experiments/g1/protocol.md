@@ -51,17 +51,27 @@ It is CI-safe (exit 1 on any mismatch).
   3. **intelligibility** — was the diff itself readable, or did its form make the
      change impossible to judge? (`intelligible` / `unintelligible`, with a note).
 
-Answers go in a per-reviewer CSV: `label,verdict,description,intelligibility,note`.
+Answers go in a per-reviewer CSV in `experiments/g1/reviewers/<name>.csv`
+(gitignored until the results are frozen). Copy `answer-sheet-template.csv` as
+the starting point: `label,verdict,description,intelligibility,note`.
 
 ## Scoring
 
-Against `packet/packet-manifest.json` (label→caseId) and `cases.json`:
+`node experiments/g1/score.mjs` reads `packet/packet-manifest.json`
+(label→caseId), `cases.json` and every `reviewers/*.csv`, then reports and
+applies the GO/NO-GO rule (exit 0 GO, 1 NO-GO):
 
-- **Per-seed detection** — fraction of reviewers who flagged a seeded case as
-  consequential *and* described the actual change.
-- **Per-class detection** — detection aggregated by seed class.
-- **False-positive rate** — clean cases flagged as consequential.
-- **Unintelligibility** — seed classes a reviewer marked unintelligible.
+- **Per-reviewer detection / false-positive** counts.
+- **Per-class detection** — reviewer-observations flagging a seeded class as
+  consequential, aggregated by class.
+- **Detection point estimate** — hits over all (reviewer × seeded-case) pairs.
+- **Unintelligibility** — a class is flagged when marked unintelligible by ≥2
+  reviewer-observations (the "repeated" test).
+
+Detection is verdict-based; the free-text `description` is printed for the human
+adjudicator but does not gate the estimate. This is why a real human panel — not
+a single automated pass — is required: the unintelligibility criterion is
+statistical over **independent** reviewers, and §4.2 mandates ≥1 non-implementer.
 
 ## GO / NO-GO rule (frozen, §4.2)
 
