@@ -240,7 +240,11 @@ async function review() {
   const esc = (s) => (/[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s);
 
   const rows = ["label,verdict,description,intelligibility,note"];
-  console.log(`\nReviewing as "${name}". Per diff: c / n / u  (Ctrl-C to abort)`);
+  console.log(`\nReviewing as "${name}". Decide from the diff alone:`);
+  console.log("  c = a consequential change (behavior / data / access / contract)");
+  console.log("  n = no-op (a 'uiko diff: clean' item, or a change that does not matter)");
+  console.log("  u = there is a change but the diff is too unreadable to judge");
+  console.log("  (Ctrl-C to abort)");
   for (const { label } of order) {
     const diff = readFileSync(join(here, "packet", `${label}.diff.txt`), "utf8").trimEnd();
     console.log("\n" + "=".repeat(64) + `\n${label}\n` + diff);

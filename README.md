@@ -16,8 +16,8 @@ Each link is gated by measurement before the next gets investment.
 | Gate | Question | State |
 |---|---|---|
 | **G0** | Does uiko make an agent author materially less application code? | **GO** — paired pilot 2026-09-18: both arms passed acceptance 4/4, ~3× fewer application tokens ([ADR 0004](docs/adr/0004-g0-pilot-go.md), [evidence](experiments/g0/results/pilot-2026-09-18/README.md)) |
-| **G1** | Are semantic plan diffs complete and useful to human reviewers? | Next — [#38](https://github.com/jmtrs/uiko/issues/38), [#39](https://github.com/jmtrs/uiko/issues/39) |
-| **Bet B** | Managed runtime (authz, audit, mutations) | Gated on G1 |
+| **G1** | Are semantic plan diffs complete and useful to human reviewers? | **GO (pilot grade)** — solo review 2026-09-20: detection 7/7, 0 false positives, mechanical 13/13 ([ADR 0005](docs/adr/0005-g1-review-go.md), [experiment](experiments/g1/README.md)); non-implementer reviewer deferred to M19 |
+| **Bet B** | Managed runtime (authz, audit, mutations) | Next — gate cleared at pilot grade |
 
 Working today: strict JSONC source adapter, pure semantic compiler with
 stable diagnostics, `UiManifest` lowering, Vue/json-render host, OpenAPI read
