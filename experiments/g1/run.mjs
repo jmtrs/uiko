@@ -156,7 +156,51 @@ function summary() {
   }
 }
 
+// Self-contained reviewer handout: one Markdown file with instructions, all 13
+// anonymized diffs inline, and a blank answer table. A reviewer needs nothing
+// but this file; they return the filled table. Regenerates the packet first so
+// the diffs and manifest stay in sync.
+function handout() {
+  packet();
+  const order = JSON.parse(readFileSync(join(here, "packet", "packet-manifest.json"), "utf8")).order;
+  const L = [];
+  L.push("# uiko plan-diff review\n");
+  L.push("You are reviewing compiled-plan diffs. For each item below, decide **from the diff alone**");
+  L.push("whether it hides a **consequential change** (something that changes behavior, data, access");
+  L.push("or contract) or is a **no-op** (cosmetic / no real change).\n");
+  L.push("For each `R##` fill one row of the table at the end:\n");
+  L.push("- **verdict**: `consequential` or `clean`");
+  L.push("- **description**: if consequential, one line on what changed (else leave blank)");
+  L.push("- **intelligibility**: `intelligible` if the diff was readable, `unintelligible` if its form");
+  L.push("  made the change impossible to judge");
+  L.push("- **note**: optional\n");
+  L.push("Return the filled table (or the CSV block) to whoever sent this. Do not look at the source repo.\n");
+  L.push("---\n");
+  for (const { label } of order) {
+    const diff = readFileSync(join(here, "packet", `${label}.diff.txt`), "utf8").trimEnd();
+    L.push(`### ${label}\n`);
+    L.push("```");
+    L.push(diff);
+    L.push("```\n");
+  }
+  L.push("---\n");
+  L.push("## Your answers\n");
+  L.push("| label | verdict | description | intelligibility | note |");
+  L.push("|---|---|---|---|---|");
+  for (const { label } of order) L.push(`| ${label} | | | | |`);
+  L.push("\nOr fill this CSV and send it back:\n");
+  L.push("```csv");
+  L.push("label,verdict,description,intelligibility,note");
+  for (const { label } of order) L.push(`${label},,,,`);
+  L.push("```");
+  const outPath = join(here, "packet", "handout.md");
+  writeFileSync(outPath, L.join("\n") + "\n");
+  console.log(`\nWrote self-contained reviewer handout: experiments/g1/packet/handout.md`);
+  console.log("Send that one file to each reviewer. Save each reply as experiments/g1/reviewers/<name>.csv, then run score.mjs.");
+}
+
 const mode = process.argv[2];
 if (mode === "--check") check();
 else if (mode === "--packet") packet();
+else if (mode === "--handout") handout();
 else summary();

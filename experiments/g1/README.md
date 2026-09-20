@@ -33,8 +33,12 @@ cargo build -p uiko-cli
 node experiments/g1/run.mjs            # summary table
 node experiments/g1/run.mjs --check    # validate corpus vs ground truth (CI-safe)
 node experiments/g1/run.mjs --packet   # emit anonymized packet/R##.diff.txt
+node experiments/g1/run.mjs --handout  # one self-contained packet/handout.md to send reviewers
 node experiments/g1/score.mjs          # score reviewers/*.csv -> GO/NO-GO
 ```
+
+To run the panel: `--handout`, send `packet/handout.md` to each reviewer, save
+each reply as `reviewers/<name>.csv`, then `score.mjs`.
 
 See [protocol.md](./protocol.md) for the reviewer procedure and the frozen
 GO/NO-GO rule.
