@@ -1,0 +1,8 @@
+{
+  // Minimal compiler fixture for the pre-G0 slice.
+  // Decoy edit: this extra comment line changes source bytes only.
+  "name": "support-console",
+  "specVersion": 1,
+  "modules": ["./features/customers"],
+  "integrations": ["./integrations/crm.jsonc"]
+}

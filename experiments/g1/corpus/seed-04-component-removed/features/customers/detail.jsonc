@@ -1,0 +1,22 @@
+{
+  "id": "CustomerDetail",
+  "route": "/customers/:customerId",
+  "queries": {
+    "customer": {
+      "operation": "crm.getCustomer",
+      "input": {
+        "customerId": "route.customerId"
+      }
+    }
+  },
+  "components": [
+    { "id": "title", "type": "Text", "value": "Customer" },
+    { "id": "name", "type": "Field", "label": "Name", "binding": "customer.name" },
+    {
+      "id": "organization",
+      "type": "Field",
+      "label": "Organization",
+      "binding": "customer.organization.name"
+    }
+  ]
+}

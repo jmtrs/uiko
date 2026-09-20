@@ -1,0 +1,29 @@
+{
+  "id": "CustomerDetail",
+  "route": "/customers/:customerId",
+  "queries": {
+    "customer": {
+      "operation": "crm.getCustomer",
+      "input": {
+        "customerId": "route.customerId"
+      }
+    }
+  },
+  "components": [
+    { "type": "Text", "id": "title", "value": "Customer" },
+    { "type": "Field", "id": "name", "binding": "customer.name", "label": "Name" },
+    {
+      "type": "Field",
+      "id": "organization",
+      "label": "Organization",
+      "binding": "customer.organization.name"
+    },
+    {
+      "type": "Field",
+      "id": "phone",
+      "label": "Phone",
+      "binding": "customer.phone",
+      "fallback": "Not provided"
+    }
+  ]
+}

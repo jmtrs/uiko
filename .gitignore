@@ -14,4 +14,5 @@ coverage/
 test-results/
 playwright-report/
 experiments/controls/t-authoring/generated/
+experiments/g1/packet/
 baselines/b-full/src/api/generated/schema.d.ts

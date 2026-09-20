@@ -1,0 +1,7 @@
+{
+  // Minimal compiler fixture for the pre-G0 slice.
+  "name": "support-console",
+  "specVersion": 1,
+  "modules": ["./features/customers"],
+  "integrations": ["./integrations/crm.jsonc"]
+}

@@ -1,0 +1,20 @@
+{
+  "$comment": "G1 seeded-review pilot ground truth. Each case is an overlay on ./base: the files under corpus/<id>/ replace the same relative paths in base to form the AFTER project. `uiko diff base AFTER` is the review surface. Reviewers score from the diff alone; this file is the answer key. See protocol.md.",
+  "base": "base",
+  "cases": [
+    { "id": "clean-01-comment", "kind": "clean", "class": null, "expectedKinds": [], "note": "comment-only edit to uiko.jsonc" },
+    { "id": "clean-02-whitespace", "kind": "clean", "class": null, "expectedKinds": [], "note": "blank-line reflow of list.jsonc" },
+    { "id": "clean-03-query-key-reorder", "kind": "clean", "class": null, "expectedKinds": [], "note": "object-key reorder inside query/input" },
+    { "id": "clean-04-component-key-reorder", "kind": "clean", "class": null, "expectedKinds": [], "note": "object-key reorder inside component objects" },
+    { "id": "clean-05-state-key-reorder", "kind": "clean", "class": null, "expectedKinds": [], "note": "object-key reorder inside state map" },
+    { "id": "clean-06-comment", "kind": "clean", "class": null, "expectedKinds": [], "note": "comment-only edit to detail.jsonc" },
+
+    { "id": "seed-01-authz", "kind": "seeded", "class": "authorization-widening", "expectedKinds": ["query.authorization.changed"], "note": "adds crm:admin+crm:read scopes to CustomerList.customers" },
+    { "id": "seed-02-execution", "kind": "seeded", "class": "managed-to-unmanaged", "expectedKinds": ["query.execution.changed"], "securitySignificant": true, "note": "CustomerDetail.customer downgraded to unmanaged execution" },
+    { "id": "seed-03-contract", "kind": "seeded", "class": "contract-fidelity-downgrade", "expectedKinds": ["query.output.changed"], "note": "CustomerPage.total no longer required in the CRM contract" },
+    { "id": "seed-04-component-removed", "kind": "seeded", "class": "component-removal", "expectedKinds": ["component.removed"], "note": "phone Field dropped from CustomerDetail" },
+    { "id": "seed-05-input-rebound", "kind": "seeded", "class": "input-rebind", "expectedKinds": ["query.input.rebound"], "note": "status filter now bound to state.page" },
+    { "id": "seed-06-options", "kind": "seeded", "class": "options-narrowing", "expectedKinds": ["component.options.changed"], "note": "Inactive option removed from status Select" },
+    { "id": "seed-07-route", "kind": "seeded", "class": "route-change", "expectedKinds": ["page.route.changed"], "note": "CustomerDetail route moved to /accounts/:customerId" }
+  ]
+}
